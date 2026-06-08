@@ -74,6 +74,10 @@
     margin: 0 0 14px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
   }
   .ctl__label span { font-family: var(--mono); letter-spacing: .5px; text-transform: none; }
+  .sublabel {
+    display: block; font-family: var(--mono); font-size: 10px; letter-spacing: 1px;
+    text-transform: uppercase; color: var(--text-dim); margin: 12px 0 6px;
+  }
 
   .field {
     font-family: var(--mono); font-size: 12px; color: var(--text);
@@ -175,9 +179,12 @@
       <div class="ctl">
         <label class="ctl__label">&#9646; Color</label>
         <div id="palette" class="swatches"></div>
-        <div id="colorMode" class="seg"></div>
-        <label class="check"><input type="checkbox" id="animColor" /> animate (solid)</label>
-        <div id="gradMotion" class="seg" title="gradient motion"></div>
+        <span class="sublabel">colors</span>
+        <div id="colorCount" class="seg"></div>
+        <span class="sublabel">direction</span>
+        <div id="gradDir" class="seg"></div>
+        <span class="sublabel">motion</span>
+        <div id="gradMotion" class="seg"></div>
       </div>
 
       <div class="ctl">
@@ -191,9 +198,18 @@
       </div>
 
       <div class="ctl">
+        <label class="ctl__label">&#9646; Middle <span>&mdash; the two waist rows</span></label>
+        <div id="waist" class="seg"></div>
+      </div>
+
+      <div class="ctl">
         <label class="ctl__label">&#9646; Eyes</label>
+        <span class="sublabel">style</span>
         <div id="eyeStyle" class="seg"></div>
+        <span class="sublabel">gap</span>
         <div id="eyeGap" class="seg" title="px between the eyes"></div>
+        <span class="sublabel">align</span>
+        <div id="eyeAlign" class="seg"></div>
         <label class="check"><input type="checkbox" id="animEyes" checked /> animate eyes</label>
       </div>
 
@@ -301,12 +317,6 @@ globalThis.Sycritters = (function () {
     return arr[Math.floor(r() * arr.length)];
   }
 
-  function pickOther(r, arr, not) {
-    let c;
-    do { c = pick(r, arr); } while (c === not && arr.length > 1);
-    return c;
-  }
-
   // A short seed string derived from a rng (used by the 🎲 button).
   function randomSeed(r) {
     return Math.floor(r() * 0xffffffff).toString(36);
@@ -314,19 +324,25 @@ globalThis.Sycritters = (function () {
 
   function generate(seed) {
     const r = rng(seed);
-    const color = pick(r, PALETTE);
-    const color2 = pickOther(r, PALETTE, color);     // 2nd color, for gradients
-    const colorMode = r() < 0.3 ? "gradient" : "solid";
+    const n = 2 + Math.floor(r() * 3);                 // 2..4 distinct gradient colors
+    const colors = [];
+    while (colors.length < n) {
+      const c = pick(r, PALETTE);
+      if (!colors.some((x) => x.name === c.name)) colors.push(c);
+    }
+    const gradientDir = ["diagonal", "horizontal", "vertical", "radial"][Math.floor(r() * 4)];
+    const gradientMotion = ["static", "drift", "pulse", "sheen"][Math.floor(r() * 4)];
     const top = pick(r, TOPS).name;
     const bottom = pick(r, BOTTOMS).name;
-    const edges = r() < 0.35 ? "bumps" : "straight";
+    const waist = ["straight", "pinch", "narrow"][Math.floor(r() * 3)]; // the two middle rows
     const k = r();
-    const style = k < 0.12 ? "visor" : k < 0.34 ? "tall" : "normal";
-    const row = 2 + (r() < 0.5 ? 0 : 1);             // 2 or 3
-    const gap = [0, 1, 2][Math.floor(r() * 3)];      // px between the two eyes
-    const gaze = { dx: r() < 0.5 ? 0 : 1, dy: r() < 0.6 ? 0 : 1 }; // seeded resting gaze
-    const gradientMotion = ["static", "drift", "pulse", "sheen"][Math.floor(r() * 4)];
-    return { seed: String(seed), color, color2, colorMode, gradientMotion, top, bottom, edges, eyes: { style, row, gap, gaze } };
+    const style = k < 0.1 ? "visor" : k < 0.2 ? "visor2" : k < 0.4 ? "tall" : "normal";
+    const row = 2 + (r() < 0.5 ? 0 : 1);               // 2 or 3
+    const gap = r() < 0.5 ? 1 : 2;                      // px between the eyes (no 0)
+    const align = ["left", "center", "center", "right"][Math.floor(r() * 4)];
+    const gaze = { dx: r() < 0.5 ? 0 : 1, dy: r() < 0.6 ? 0 : 1 };
+    return { seed: String(seed), colors, gradientDir, gradientMotion, top, bottom, waist,
+      eyes: { style, row, gap, align, gaze } };
   }
 
   // --- Rasterize: spec -> 8x8 grid of codes (0 empty,1 body,2 white,3 pupil)
@@ -356,20 +372,32 @@ globalThis.Sycritters = (function () {
       for (let x = 0; x < 8; x++)
         if (rows8[y][x]) g[y][x] = 1;
 
-    // Edge "bumps": carve a notch on the outer column mid-body.
-    if (spec.edges === "bumps") {
+    // Waist: pinch the two middle rows (3,4) inward.
+    if (spec.waist === "pinch" || spec.waist === "narrow") {
       for (const y of [3, 4]) { g[y][0] = 0; g[y][7] = 0; }
+    }
+    if (spec.waist === "narrow") {
+      for (const y of [3, 4]) { g[y][1] = 0; g[y][6] = 0; }
     }
 
     stampEyes(g, spec, frame);
     return g;
   }
 
+  // Left column for an eye group of total width `totalW`, by alignment.
+  function eyeStart(totalW, align) {
+    if (align === "left") return 1;
+    if (align === "right") return Math.max(1, 7 - totalW);
+    return Math.max(0, Math.floor((8 - totalW) / 2));
+  }
+
   function stampEyes(g, spec, frame) {
     const gaze = (frame && frame.gaze) || spec.eyes.gaze || { dx: 0, dy: 0 };
     const blink = !!(frame && frame.blink);
-    const r0 = spec.eyes.row;                       // top row of the eye
-    const gap = spec.eyes.gap == null ? 0 : spec.eyes.gap; // px between the eyes
+    const r0 = spec.eyes.row;            // top row of the eye
+    const gap = spec.eyes.gap || 1;      // px between the eyes
+    const align = spec.eyes.align || "center";
+    const style = spec.eyes.style;
 
     // Only paint over body, so eyes never float in empty space.
     const put = (x, y, code) => {
@@ -378,16 +406,20 @@ globalThis.Sycritters = (function () {
       else if (g[y][x] === 2 && code === 3) g[y][x] = 3;
     };
 
-    if (spec.eyes.style === "visor") {
-      for (let x = 0; x < 8; x++) if (g[r0][x] === 1) g[r0][x] = 3; // black band
-      const ls = Math.floor((8 - (2 + gap)) / 2);                  // 1px holes
-      for (const ex of [ls, ls + 1 + gap]) if (g[r0][ex] === 3) g[r0][ex] = 2;
+    // visor (1px band) / visor2 (2px band): black band(s) + two white holes.
+    if (style === "visor" || style === "visor2") {
+      const rows = style === "visor2" ? [r0, r0 + 1] : [r0];
+      const ls = eyeStart(2 + gap, align);
+      for (const ry of rows) {
+        for (let x = 0; x < 8; x++) if (g[ry][x] === 1) g[ry][x] = 3;
+        for (const ex of [ls, ls + 1 + gap]) if (g[ry][ex] === 3) g[ry][ex] = 2;
+      }
       return;
     }
 
     // normal = 2x2 eyes; tall = 1x2 vertical eyes (pupil moves up/down).
-    const w = spec.eyes.style === "tall" ? 1 : 2;
-    const leftStart = Math.floor((8 - (2 * w + gap)) / 2);
+    const w = style === "tall" ? 1 : 2;
+    const leftStart = eyeStart(2 * w + gap, align);
     for (const baseX of [leftStart, leftStart + w + gap]) {
       for (let ey = 0; ey < 2; ey++)
         for (let ex = 0; ex < w; ex++) put(baseX + ex, r0 + ey, 2);
@@ -491,26 +523,38 @@ globalThis.Sycritters = (function () {
     const f = (v) => ("0" + Math.round(v).toString(16)).slice(-2);
     return "#" + f(ca[0] + (cb[0] - ca[0]) * t) + f(ca[1] + (cb[1] - ca[1]) * t) + f(ca[2] + (cb[2] - ca[2]) * t);
   }
-  // Gradient body paint: a diagonal blend between two colors, quantized into
-  // bands (pixel-art). `motion` picks a subtle animation over `frame`:
-  //   static = fixed · drift = slow diagonal scroll · pulse = gentle breathing
+  // Cyclic multi-color blend at position t (any real; wraps over the colors).
+  function multiLerp(colors, t) {
+    const n = colors.length;
+    const pos = (((t % 1) + 1) % 1) * n; // 0..n
+    const i = Math.floor(pos) % n;
+    return lerpHex(colors[i], colors[(i + 1) % n], pos - Math.floor(pos));
+  }
+
+  // Gradient body paint over 2-4 colors. `dir` lays out the blend; `motion`
+  // animates it subtly over `frame`:
+  //   static = fixed · drift = slow scroll · pulse = gentle breathing
   //   · sheen = a soft highlight band sweeps across.
-  function gradientPaint(a, b, motion, frame) {
+  function gradientPaint(colors, dir, motion, frame) {
     const BANDS = 6;
+    const pos = (x, y) =>
+      dir === "horizontal" ? x / 7 :
+      dir === "vertical"   ? y / 7 :
+      dir === "radial"     ? Math.min(1, Math.hypot(x - 3.5, y - 3.5) / 4.95) :
+                             (x + y) / 14;
     return (x, y) => {
-      const d = x + y; // 0..14 along the diagonal
-      let t;
-      if (motion === "pulse") {
-        t = 0.5 + 0.45 * Math.sin(frame / 20 - d * 0.1);
-      } else if (motion === "sheen") {
-        const center = ((frame / 2) % 26) - 6; // slow highlight sweep
-        t = Math.max(0, 1 - Math.abs(d - center) / 3.5);
-      } else {
-        const off = motion === "drift" ? frame / 3 : 0; // drift scrolls slowly
-        t = Math.abs(((((d - off) % 14) + 14) % 14) / 7 - 1);
+      const u = pos(x, y);
+      let phase = 0;
+      if (motion === "drift") phase = -frame / 42;
+      else if (motion === "pulse") phase = Math.sin(frame / 20) * 0.12;
+      const band = Math.round((((u + phase) % 1) + 1) % 1 * BANDS) / BANDS;
+      let col = multiLerp(colors, band);
+      if (motion === "sheen") {
+        const center = ((frame / 2) % 28) / 28; // 0..1 sweep
+        const amt = Math.max(0, 1 - Math.abs(u - center) * 6) * 0.5;
+        if (amt > 0) col = lerpHex(col, "#ffffff", amt);
       }
-      const band = Math.round(Math.min(1, Math.max(0, t)) * (BANDS - 1)) / (BANDS - 1);
-      return lerpHex(a, b, band);
+      return col;
     };
   }
 
@@ -521,9 +565,10 @@ globalThis.Sycritters = (function () {
   const els = {
     editor: $("editor"), seed: $("seed"), seedReadout: $("seedReadout"),
     rand: $("rand"), surprise: $("surprise"),
-    palette: $("palette"), colorMode: $("colorMode"), gradMotion: $("gradMotion"), tops: $("tops"), bottoms: $("bottoms"),
-    eyeStyle: $("eyeStyle"), eyeGap: $("eyeGap"), bodyAnim: $("bodyAnim"),
-    animColor: $("animColor"), animEyes: $("animEyes"),
+    palette: $("palette"), colorCount: $("colorCount"), gradDir: $("gradDir"), gradMotion: $("gradMotion"),
+    tops: $("tops"), bottoms: $("bottoms"), waist: $("waist"),
+    eyeStyle: $("eyeStyle"), eyeGap: $("eyeGap"), eyeAlign: $("eyeAlign"), bodyAnim: $("bodyAnim"),
+    animEyes: $("animEyes"),
     png: $("png"), svg: $("svg"), genWall: $("genWall"), grid: $("grid"),
   };
 
@@ -551,61 +596,23 @@ globalThis.Sycritters = (function () {
   /* ---- animation -------------------------------------------------------- */
   const EDITOR_PAD = 2; // cells of margin around the critter (headroom for jumps)
 
-  // hex -> HSL hue rotation -> hex (for animated color).
+  // hex "#rrggbb" -> [r,g,b] (used by the gradient lerp).
   function hexToRgb(h) {
     h = h.replace("#", "");
     return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
-  }
-  function rgbToHsl(r, g, b) {
-    r /= 255; g /= 255; b /= 255;
-    const max = Math.max(r, g, b), min = Math.min(r, g, b);
-    let h = 0, s = 0, l = (max + min) / 2;
-    if (max !== min) {
-      const d = max - min;
-      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-      if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
-      else if (max === g) h = (b - r) / d + 2;
-      else h = (r - g) / d + 4;
-      h /= 6;
-    }
-    return [h * 360, s, l];
-  }
-  function hslToRgb(h, s, l) {
-    h /= 360;
-    if (s === 0) return [l * 255, l * 255, l * 255];
-    const hue2rgb = (p, q, t) => {
-      if (t < 0) t += 1; if (t > 1) t -= 1;
-      if (t < 1 / 6) return p + (q - p) * 6 * t;
-      if (t < 1 / 2) return q;
-      if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
-      return p;
-    };
-    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-    const p = 2 * l - q;
-    return [hue2rgb(p, q, h + 1 / 3) * 255, hue2rgb(p, q, h) * 255, hue2rgb(p, q, h - 1 / 3) * 255];
-  }
-  function hueShift(hex, deg) {
-    const [h, s, l] = rgbToHsl(...hexToRgb(hex));
-    const [r, g, b] = hslToRgb((h + deg) % 360, s, l);
-    const f = (v) => ("0" + Math.round(v).toString(16)).slice(-2);
-    return "#" + f(r) + f(g) + f(b);
   }
 
   // All motion is quantized to 12fps integer frames -> pixel-art stepped.
   const FPS = 12;
 
-  // Body paint for a spec at a frame: gradient animates per its motion mode;
-  // solid optionally hue-cycles when "animate color" is on.
-  function paintFor(spec, frame, animColorOn) {
-    if (spec.colorMode === "gradient")
-      return gradientPaint(spec.color.hex, spec.color2.hex, spec.gradientMotion || "drift", frame);
-    return animColorOn ? hueShift(spec.color.hex, (frame * 6) % 360) : spec.color.hex;
+  const hexes = (spec) => spec.colors.map((c) => c.hex);
+  // Body paint for a spec at a frame: a moving multi-color gradient.
+  function paintFor(spec, frame) {
+    return gradientPaint(hexes(spec), spec.gradientDir, spec.gradientMotion || "drift", frame);
   }
-  // Resting paint for static renders (wall tiles, exports).
+  // Resting (static) paint for wall tiles + exports.
   function restPaint(spec) {
-    return spec.colorMode === "gradient"
-      ? gradientPaint(spec.color.hex, spec.color2.hex, "static", 0)
-      : spec.color.hex;
+    return gradientPaint(hexes(spec), spec.gradientDir, "static", 0);
   }
 
   // Eyes: gaze + blink as a function of the integer frame counter.
@@ -642,7 +649,7 @@ globalThis.Sycritters = (function () {
   function draw(frame) {
     const f = { gaze: current.eyes.gaze || { dx: 0, dy: 0 }, blink: false };
     if (els.animEyes.checked) { const e = eyeFrame(frame); f.gaze = e.gaze; f.blink = e.blink; }
-    drawCanvas(els.editor, S.rasterize(current, f), paintFor(current, frame, els.animColor.checked),
+    drawCanvas(els.editor, S.rasterize(current, f), paintFor(current, frame),
       EDITOR_SCALE, bodyTransform(frame), EDITOR_PAD);
   }
 
@@ -659,16 +666,39 @@ globalThis.Sycritters = (function () {
       const b = document.createElement("button");
       b.className = "swatch"; b.dataset.name = c.name;
       b.style.background = c.hex; b.title = c.name;
-      b.addEventListener("click", () => { override({ color: c }); render(); });
+      b.addEventListener("click", () => { setPrimaryColor(c); render(); });
       els.palette.appendChild(b);
     }
     const r = document.createElement("button");
-    r.className = "swatch swatch--rand"; r.textContent = "?"; r.title = "random color";
-    r.addEventListener("click", () => {
-      override({ color: S.PALETTE[Math.floor(Math.random() * S.PALETTE.length)] });
-      render();
-    });
+    r.className = "swatch swatch--rand"; r.textContent = "?"; r.title = "shuffle colors";
+    r.addEventListener("click", () => { override({ colors: randomColors(current.colors.length) }); render(); });
     els.palette.appendChild(r);
+  }
+
+  // distinct random palette colors
+  function randomColors(n) {
+    const out = [];
+    while (out.length < n) {
+      const c = S.PALETTE[Math.floor(Math.random() * S.PALETTE.length)];
+      if (!out.some((x) => x.name === c.name)) out.push(c);
+    }
+    return out;
+  }
+  // make `c` the first gradient color (swap if already in the set)
+  function setPrimaryColor(c) {
+    const cs = current.colors.slice();
+    const i = cs.findIndex((x) => x.name === c.name);
+    if (i >= 0) [cs[0], cs[i]] = [cs[i], cs[0]]; else cs[0] = c;
+    override({ colors: cs });
+  }
+  function setColorCount(n) {
+    const cs = current.colors.slice();
+    while (cs.length < n) {
+      const c = S.PALETTE[Math.floor(Math.random() * S.PALETTE.length)];
+      if (!cs.some((x) => x.name === c.name)) cs.push(c);
+    }
+    cs.length = n;
+    override({ colors: cs });
   }
 
   function buildSeg(container, values, onPick, withRandom) {
@@ -690,12 +720,15 @@ globalThis.Sycritters = (function () {
   }
 
   function buildSegs() {
+    buildSeg(els.colorCount, ["2", "3", "4"], (v) => setColorCount(Number(v)), false);
+    buildSeg(els.gradDir, ["diagonal", "horizontal", "vertical", "radial"], (v) => override({ gradientDir: v }), false);
+    buildSeg(els.gradMotion, ["static", "drift", "pulse", "sheen"], (v) => override({ gradientMotion: v }), false);
     buildSeg(els.tops, S.TOPS.map((m) => m.name), (v) => override({ top: v }), true);
     buildSeg(els.bottoms, S.BOTTOMS.map((m) => m.name), (v) => override({ bottom: v }), true);
-    buildSeg(els.eyeStyle, ["normal", "tall", "visor"], (v) => override({ eyes: { ...current.eyes, style: v } }), false);
-    buildSeg(els.eyeGap, ["0", "1", "2"], (v) => override({ eyes: { ...current.eyes, gap: Number(v) } }), false);
-    buildSeg(els.colorMode, ["solid", "gradient"], (v) => override({ colorMode: v }), false);
-    buildSeg(els.gradMotion, ["static", "drift", "pulse", "sheen"], (v) => override({ gradientMotion: v }), false);
+    buildSeg(els.waist, ["straight", "pinch", "narrow"], (v) => override({ waist: v }), false);
+    buildSeg(els.eyeStyle, ["normal", "tall", "visor", "visor2"], (v) => override({ eyes: { ...current.eyes, style: v } }), false);
+    buildSeg(els.eyeGap, ["1", "2"], (v) => override({ eyes: { ...current.eyes, gap: Number(v) } }), false);
+    buildSeg(els.eyeAlign, ["left", "center", "right"], (v) => override({ eyes: { ...current.eyes, align: v } }), false);
     buildSeg(els.bodyAnim, ["none", "bob", "jump", "walk"], (v) => { bodyAnimMode = v; }, false);
   }
 
@@ -703,13 +736,16 @@ globalThis.Sycritters = (function () {
     for (const b of container.children) b.setAttribute("aria-pressed", isOn(b) ? "true" : "false");
   }
   function syncControls() {
-    setPressed(els.palette, (b) => b.dataset.name === current.color.name);
-    setPressed(els.colorMode, (b) => b.dataset.value === current.colorMode);
+    setPressed(els.palette, (b) => current.colors.some((c) => c.name === b.dataset.name));
+    setPressed(els.colorCount, (b) => b.dataset.value === String(current.colors.length));
+    setPressed(els.gradDir, (b) => b.dataset.value === current.gradientDir);
     setPressed(els.gradMotion, (b) => b.dataset.value === (current.gradientMotion || "drift"));
     setPressed(els.tops, (b) => b.dataset.value === current.top);
     setPressed(els.bottoms, (b) => b.dataset.value === current.bottom);
+    setPressed(els.waist, (b) => b.dataset.value === current.waist);
     setPressed(els.eyeStyle, (b) => b.dataset.value === current.eyes.style);
     setPressed(els.eyeGap, (b) => b.dataset.value === String(current.eyes.gap));
+    setPressed(els.eyeAlign, (b) => b.dataset.value === (current.eyes.align || "center"));
     setPressed(els.bodyAnim, (b) => b.dataset.value === bodyAnimMode);
   }
 
@@ -747,7 +783,6 @@ globalThis.Sycritters = (function () {
   els.seed.addEventListener("change", (e) => { setSeedAndRegen(e.target.value.trim() || newSeed()); render(); });
   els.rand.addEventListener("click", () => { setSeedAndRegen(newSeed()); render(); });
   els.surprise.addEventListener("click", () => { setSeedAndRegen(newSeed()); render(); });
-  els.animColor.addEventListener("change", render);
   els.animEyes.addEventListener("change", render);
   els.png.addEventListener("click", () => downloadPNG());
   els.svg.addEventListener("click", () => downloadSVG());

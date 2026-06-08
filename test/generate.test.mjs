@@ -11,15 +11,17 @@ test("generate is deterministic for the same seed", () => {
 test("generate produces a spec with valid axes", () => {
   const spec = S.generate("abc");
   assert.equal(spec.seed, "abc");
-  assert.ok(S.PALETTE.some(c => c.hex === spec.color.hex));
   assert.ok(S.TOPS.some(m => m.name === spec.top));
   assert.ok(S.BOTTOMS.some(m => m.name === spec.bottom));
-  assert.ok(["straight", "bumps"].includes(spec.edges));
-  assert.ok(["normal", "tall", "visor"].includes(spec.eyes.style));
-  assert.ok([0, 1, 2].includes(spec.eyes.gap));
+  assert.ok(["straight", "pinch", "narrow"].includes(spec.waist));
+  assert.ok(["normal", "tall", "visor", "visor2"].includes(spec.eyes.style));
+  assert.ok([1, 2].includes(spec.eyes.gap));
+  assert.ok(["left", "center", "right"].includes(spec.eyes.align));
   assert.ok(spec.eyes.row >= 2 && spec.eyes.row <= 3);
-  assert.ok(["solid", "gradient"].includes(spec.colorMode));
-  assert.ok(S.PALETTE.some((c) => c.hex === spec.color2.hex), "color2 from palette");
+  // all critters are gradients of 2-4 palette colors
+  assert.ok(Array.isArray(spec.colors) && spec.colors.length >= 2 && spec.colors.length <= 4);
+  for (const c of spec.colors) assert.ok(S.PALETTE.some(p => p.hex === c.hex), "color from palette");
+  assert.ok(["diagonal", "horizontal", "vertical", "radial"].includes(spec.gradientDir));
   assert.ok(["static", "drift", "pulse", "sheen"].includes(spec.gradientMotion));
 });
 

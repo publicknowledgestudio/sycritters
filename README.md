@@ -11,25 +11,25 @@ Just open `index.html` in a browser. No build, no server, no dependencies.
 
 - **Seed → critter.** The same seed always makes the same critter. Type a seed,
   hit 🎲 for a random one, or **Surprise me**.
-- **Configure it.** Pick a body color and color mode (solid or a **moving
-  gradient** between two colors), a top half (dome / notch / ears / antennae /
-  flat, plus the asymmetric diagonal slants **tl / tr**), a bottom half (flat /
-  round / legs / splayed / spikes / tripod, plus slants **bl / br**), and eyes —
-  style (normal / tall / visor) and a 0/1/2 px gap. Touching one control changes
-  only that axis (lock-an-axis), so you can lock a shape and reroll the color.
-- **Animate it.** Solid colors can hue-cycle; **gradients** have subtle motion
-  modes — `static / drift / pulse / sheen`. Eyes blink + look around, and the
-  body can bob / jump / walk. All motion runs at **12fps in whole-pixel steps**
-  for a true pixel-art feel.
+- **Configure it.** Every critter is a **gradient** of 2–4 palette colors with a
+  direction (diagonal / horizontal / vertical / radial). Pick a top half (dome /
+  notch / ears / antennae / flat + diagonal slants **tl / tr**), a bottom half
+  (flat / round / legs / splayed / spikes / tripod + slants **bl / br**), the
+  **middle** two rows (straight / pinch / narrow), and eyes — style (normal /
+  tall / visor / visor2), a 1 or 2 px gap, and left / center / right alignment.
+  Touching one control changes only that axis (lock-an-axis).
+- **Animate it.** Gradients have subtle motion modes — `static / drift / pulse /
+  sheen`. Eyes blink + look around, and the body can bob / jump / walk. All
+  motion runs at **12fps in whole-pixel steps** for a true pixel-art feel.
 - **The Wall.** Generate a grid of random critters; click any to load it.
 - **Export.** Download the current critter as a crisp **PNG** or scalable **SVG**.
 
 ## How it works
 
-`seed → spec → 8×8 grid`. A seeded RNG turns the seed into a *spec* (color, top,
-bottom, edges, eyes). The rasterizer builds the **left four columns** from a
-hand-authored module vocabulary and **mirrors** them for symmetry, then stamps
-the eyes. Grid cell codes: `0` empty · `1` body · `2` eye-white · `3` pupil.
+`seed → spec → 8×8 grid`. A seeded RNG turns the seed into a *spec* (colors, top,
+bottom, waist, eyes). The rasterizer builds each row from a hand-authored module
+vocabulary — symmetric modules mirror a 4-wide half; asymmetric slants define all
+8 columns — then carves the waist and stamps the eyes. Grid cell codes: `0` empty · `1` body · `2` eye-white · `3` pupil.
 Renderers (canvas, SVG) consume that grid.
 
 The engine is pure and DOM-free, inside a marked block in `index.html`:

@@ -26,14 +26,39 @@ test("silhouette is left-right symmetric for symmetric modules", () => {
 
 test("asymmetric top 'tr' carves the top-right diagonal staircase", () => {
   const spec = {
-    ...S.generate("x"), top: "tr", bottom: "flat", edges: "straight",
-    eyes: { style: "normal", row: 5, gap: 0, gaze: { dx: 0, dy: 0 } },
+    ...S.generate("x"), top: "tr", bottom: "flat", waist: "straight",
+    eyes: { style: "normal", row: 5, gap: 1, align: "center", gaze: { dx: 0, dy: 0 } },
   };
   const g = S.rasterize(spec);
   assert.equal(g[0][5], 0); assert.equal(g[0][6], 0); assert.equal(g[0][7], 0);
   assert.equal(g[1][6], 0); assert.equal(g[1][7], 0);
   assert.equal(g[2][7], 0);
   assert.equal(g[0][0], 1); assert.equal(g[1][0], 1); // left side intact
+});
+
+test("eye alignment shifts eyes left vs right", () => {
+  const base = {
+    ...S.generate("x"), top: "flat", bottom: "flat", waist: "straight",
+    eyes: { style: "tall", row: 3, gap: 1, align: "left", gaze: { dx: 0, dy: 0 } },
+  };
+  const whiteCols = (g) => {
+    const cols = [];
+    for (let x = 0; x < 8; x++) for (let y = 0; y < 8; y++) if (g[y][x] === 2) { cols.push(x); break; }
+    return cols;
+  };
+  const L = whiteCols(S.rasterize(base));
+  const R = whiteCols(S.rasterize({ ...base, eyes: { ...base.eyes, align: "right" } }));
+  assert.ok(L[0] < R[0], `left-aligned eyes start further left (${L} vs ${R})`);
+});
+
+test("visor2 is a 2px-tall band with white holes", () => {
+  const spec = {
+    ...S.generate("x"), top: "flat", bottom: "flat", waist: "straight",
+    eyes: { style: "visor2", row: 3, gap: 1, align: "center", gaze: { dx: 0, dy: 0 } },
+  };
+  const g = S.rasterize(spec);
+  assert.ok(g[3].includes(3) && g[4].includes(3), "band spans rows 3 and 4");
+  assert.ok(g[3].includes(2) && g[4].includes(2), "white holes on both rows");
 });
 
 test("eyes are always present (white + pupil)", () => {
