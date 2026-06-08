@@ -10,12 +10,16 @@ Just open `index.html` in a browser. No build, no server, no dependencies.
 
 - **Seed → critter.** The same seed always makes the same critter. Type a seed,
   hit 🎲 for a random one, or **Surprise me**.
-- **Configure it.** Pick a body color, a top half (dome / notch / ears /
-  antennae / flat), a bottom half (flat / round / legs / splayed / spikes), and
-  eyes (normal / visor; close / wide). Touching one control changes only that
-  axis (lock-an-axis), so you can lock a shape and reroll the color.
-- **Animate it.** Toggle animated color (hue cycling) and animated eyes
-  (blink + look-around), and give it body motion (bob / jump / walk).
+- **Configure it.** Pick a body color and color mode (solid or a **moving
+  gradient** between two colors), a top half (dome / notch / ears / antennae /
+  flat), a bottom half (flat / round / legs / splayed / spikes / tripod), and
+  eyes — style (normal / tall / visor) and a 0/1/2 px gap. Touching one control
+  changes only that axis (lock-an-axis), so you can lock a shape and reroll the
+  color.
+- **Animate it.** Toggle animated color (solid hue-cycles; gradient scrolls)
+  and animated eyes (blink + look-around), and give it body motion (bob / jump
+  / walk). All motion runs at **12fps in whole-pixel steps** for a true
+  pixel-art feel.
 - **The Wall.** Generate a grid of random critters; click any to load it.
 - **Export.** Download the current critter as a crisp **PNG** or scalable **SVG**.
 
