@@ -342,11 +342,18 @@ globalThis.Sycritters = (function () {
     { name: "legs",    rows: [[1,1,1,1],[1,1,1,1],[1,1,1,1],[0,1,1,0]] },
     { name: "splayed", rows: [[1,1,1,1],[1,1,1,1],[1,1,1,1],[1,1,0,0]] },
     { name: "spikes",  rows: [[1,1,1,1],[1,1,1,1],[1,0,1,1],[1,0,0,1]] },
+    { name: "tripod",  rows: [[1,1,1,1],[1,1,1,1],[1,1,1,1],[1,1,0,1]] }, // 2-1-2-1-2 legs
   ];
 
   // --- Generation: seed -> spec ------------------------------------------
   function pick(r, arr) {
     return arr[Math.floor(r() * arr.length)];
+  }
+
+  function pickOther(r, arr, not) {
+    let c;
+    do { c = pick(r, arr); } while (c === not && arr.length > 1);
+    return c;
   }
 
   // A short seed string derived from a rng (used by the 🎲 button).
@@ -356,19 +363,18 @@ globalThis.Sycritters = (function () {
 
   function generate(seed) {
     const r = rng(seed);
-    return {
-      seed: String(seed),
-      color: pick(r, PALETTE),
-      top: pick(r, TOPS).name,
-      bottom: pick(r, BOTTOMS).name,
-      edges: r() < 0.35 ? "bumps" : "straight",
-      eyes: {
-        style: r() < 0.18 ? "visor" : "normal",
-        row: 2 + (r() < 0.5 ? 0 : 1), // 2 or 3
-        spacing: r() < 0.5 ? "close" : "wide",
-        gaze: { dx: r() < 0.5 ? 0 : 1, dy: r() < 0.6 ? 0 : 1 }, // seeded resting gaze; animation overrides it
-      },
-    };
+    const color = pick(r, PALETTE);
+    const color2 = pickOther(r, PALETTE, color);     // 2nd color, for gradients
+    const colorMode = r() < 0.3 ? "gradient" : "solid";
+    const top = pick(r, TOPS).name;
+    const bottom = pick(r, BOTTOMS).name;
+    const edges = r() < 0.35 ? "bumps" : "straight";
+    const k = r();
+    const style = k < 0.12 ? "visor" : k < 0.34 ? "tall" : "normal";
+    const row = 2 + (r() < 0.5 ? 0 : 1);             // 2 or 3
+    const gap = [0, 1, 2][Math.floor(r() * 3)];      // px between the two eyes
+    const gaze = { dx: r() < 0.5 ? 0 : 1, dy: r() < 0.6 ? 0 : 1 }; // seeded resting gaze
+    return { seed: String(seed), color, color2, colorMode, top, bottom, edges, eyes: { style, row, gap, gaze } };
   }
 
   // --- Rasterize: spec -> 8x8 grid of codes (0 empty,1 body,2 white,3 pupil)
@@ -404,8 +410,8 @@ globalThis.Sycritters = (function () {
   function stampEyes(g, spec, frame) {
     const gaze = (frame && frame.gaze) || spec.eyes.gaze || { dx: 0, dy: 0 };
     const blink = !!(frame && frame.blink);
-    const r0 = spec.eyes.row;                            // top row of the eye
-    const leftX = spec.eyes.spacing === "wide" ? 1 : 2;  // left eye starts here
+    const r0 = spec.eyes.row;                       // top row of the eye
+    const gap = spec.eyes.gap == null ? 0 : spec.eyes.gap; // px between the eyes
 
     // Only paint over body, so eyes never float in empty space.
     const put = (x, y, code) => {
@@ -416,16 +422,19 @@ globalThis.Sycritters = (function () {
 
     if (spec.eyes.style === "visor") {
       for (let x = 0; x < 8; x++) if (g[r0][x] === 1) g[r0][x] = 3; // black band
-      for (const ex of [leftX, 7 - leftX]) if (g[r0][ex] === 3) g[r0][ex] = 2; // holes
+      const ls = Math.floor((8 - (2 + gap)) / 2);                  // 1px holes
+      for (const ex of [ls, ls + 1 + gap]) if (g[r0][ex] === 3) g[r0][ex] = 2;
       return;
     }
 
-    // normal: two 2x2 white eyes (mirrored), pupil placed by gaze.
-    for (const baseX of [leftX, 7 - leftX - 1]) {
-      for (let dy = 0; dy < 2; dy++)
-        for (let dx = 0; dx < 2; dx++) put(baseX + dx, r0 + dy, 2);
+    // normal = 2x2 eyes; tall = 1x2 vertical eyes (pupil moves up/down).
+    const w = spec.eyes.style === "tall" ? 1 : 2;
+    const leftStart = Math.floor((8 - (2 * w + gap)) / 2);
+    for (const baseX of [leftStart, leftStart + w + gap]) {
+      for (let ey = 0; ey < 2; ey++)
+        for (let ex = 0; ex < w; ex++) put(baseX + ex, r0 + ey, 2);
       if (!blink) {
-        const px = baseX + (gaze.dx > 0 ? 1 : 0);
+        const px = baseX + (w === 1 ? 0 : gaze.dx > 0 ? 1 : 0);
         const py = r0 + (gaze.dy > 0 ? 1 : 0);
         put(px, py, 3);
       }
@@ -444,7 +453,7 @@ globalThis.Sycritters = (function () {
         for (let x = 0; x < 8; x++) {
           const c = g[y][x];
           if (![0, 1, 2, 3].includes(c)) failures.push([i, "code", x, y]);
-          if ((g[y][x] === 1) !== (g[y][7 - x] === 1)) symOk = false;
+          if ((g[y][x] !== 0) !== (g[y][7 - x] !== 0)) symOk = false; // silhouette
           if (c === 2) hasWhite = true;
           if (c === 3) hasPupil = true;
         }

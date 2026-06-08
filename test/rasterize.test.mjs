@@ -11,13 +11,17 @@ test("grid is 8x8", () => {
   for (const row of g) assert.equal(row.length, 8);
 });
 
-test("body cells are left-right symmetric", () => {
-  const g = grid("abc");
-  for (let y = 0; y < 8; y++)
-    for (let x = 0; x < 4; x++) {
-      const l = g[y][x] === 1, r = g[y][7 - x] === 1;
-      assert.equal(l, r, `asymmetry at (${x},${y})`);
-    }
+test("silhouette is left-right symmetric (eyes may sit off-center)", () => {
+  // The creature outline is symmetric; facial features (eyes) need not be,
+  // since eyes only recolor existing body cells (never add/remove silhouette).
+  for (const seed of ["abc", "gap1-seed", "tall-seed", "xyz"]) {
+    const g = grid(seed);
+    for (let y = 0; y < 8; y++)
+      for (let x = 0; x < 4; x++) {
+        const l = g[y][x] !== 0, r = g[y][7 - x] !== 0;
+        assert.equal(l, r, `${seed}: asymmetry at (${x},${y})`);
+      }
+  }
 });
 
 test("eyes are always present (white + pupil)", () => {

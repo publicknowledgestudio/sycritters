@@ -24,5 +24,5 @@ test("module name lists are exposed", () => {
   // Array.prototype differs from a test-realm literal and deepStrictEqual
   // would reject them despite identical contents.
   assert.equal(S.TOPS.map(m => m.name).sort().join(","), "antennae,dome,ears,flat,notch");
-  assert.equal(S.BOTTOMS.map(m => m.name).sort().join(","), "flat,legs,round,spikes,splayed");
+  assert.equal(S.BOTTOMS.map(m => m.name).sort().join(","), "flat,legs,round,spikes,splayed,tripod");
 });

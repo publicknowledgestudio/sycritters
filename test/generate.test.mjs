@@ -15,9 +15,11 @@ test("generate produces a spec with valid axes", () => {
   assert.ok(S.TOPS.some(m => m.name === spec.top));
   assert.ok(S.BOTTOMS.some(m => m.name === spec.bottom));
   assert.ok(["straight", "bumps"].includes(spec.edges));
-  assert.ok(["normal", "visor"].includes(spec.eyes.style));
-  assert.ok(["close", "wide"].includes(spec.eyes.spacing));
+  assert.ok(["normal", "tall", "visor"].includes(spec.eyes.style));
+  assert.ok([0, 1, 2].includes(spec.eyes.gap));
   assert.ok(spec.eyes.row >= 2 && spec.eyes.row <= 3);
+  assert.ok(["solid", "gradient"].includes(spec.colorMode));
+  assert.ok(S.PALETTE.some((c) => c.hex === spec.color2.hex), "color2 from palette");
 });
 
 test("different seeds usually differ", () => {
