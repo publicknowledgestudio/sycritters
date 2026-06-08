@@ -71,16 +71,13 @@
   .specimen { display: flex; flex-direction: column; gap: 0; }
   .specimen__card {
     background-color: var(--card);
-    background-image:
-      linear-gradient(var(--card-line) 1px, transparent 1px),
-      linear-gradient(90deg, var(--card-line) 1px, transparent 1px);
-    background-size: 22px 22px;
     border: 2px solid #000;
     box-shadow: 8px 8px 0 rgba(0,0,0,.55);
     display: grid; place-items: center;
-    padding: 7% ; aspect-ratio: 1 / 0.82;
+    padding: 14px; aspect-ratio: 1;
   }
-  #editor { image-rendering: pixelated; width: min(74%, 420px); height: auto; }
+  /* the 16x16 grid is drawn into the canvas itself, behind the centered critter */
+  #editor { image-rendering: pixelated; width: 100%; max-width: 452px; height: auto; }
   .specimen__plate {
     display: flex; align-items: baseline; gap: 12px;
     background: #000; color: var(--card);
@@ -232,7 +229,8 @@
       <div class="ctl">
         <label class="ctl__label">&#9646; Color</label>
         <div id="palette" class="swatches"></div>
-        <label class="check"><input type="checkbox" id="animColor" /> animate color</label>
+        <div id="colorMode" class="seg"></div>
+        <label class="check"><input type="checkbox" id="animColor" /> animate / move</label>
       </div>
 
       <div class="ctl">
@@ -248,7 +246,7 @@
       <div class="ctl">
         <label class="ctl__label">&#9646; Eyes</label>
         <div id="eyeStyle" class="seg"></div>
-        <div id="eyeSpacing" class="seg"></div>
+        <div id="eyeGap" class="seg" title="px between the eyes"></div>
         <label class="check"><input type="checkbox" id="animEyes" checked /> animate eyes</label>
       </div>
 
@@ -473,26 +471,24 @@ globalThis.Sycritters = (function () {
 <script>
   /* ---- Renderers (consume engine output) ------------------------------ */
 
-  // Grid code -> fill style; null = leave transparent.
-  function codeColor(code, bodyHex) {
-    return code === 1 ? bodyHex : code === 2 ? "#ffffff" : code === 3 ? "#000000" : null;
+  // Body paint may be a flat hex string OR a per-cell function (x,y)->hex
+  // (used by moving gradients). Eyes are always white/black.
+  function cellFill(code, paint, x, y) {
+    if (code === 1) return typeof paint === "function" ? paint(x, y) : paint;
+    if (code === 2) return "#ffffff";
+    if (code === 3) return "#000000";
+    return null;
   }
 
-  // Draw an 8x8 grid into a canvas at an integer pixel scale.
-  // transform (optional) = { dx, dy, squashY } in *cell* units (body animation).
-  // pad (optional, default 0) = cells of margin all around (headroom for jumps).
-  function drawCanvas(canvas, grid, bodyHex, scale, transform, pad) {
+  // Paint the 8x8 critter cells into a 2d context (caller handles resize/clear).
+  // transform = { dx, dy, squashY } in cell units; pad = cell offset.
+  function paintCells(ctx, grid, paint, scale, transform, pad) {
     const t = transform || {};
     const dx = t.dx || 0, dy = t.dy || 0, sq = t.squashY == null ? 1 : t.squashY;
     const p = pad || 0;
-    const ctx = canvas.getContext("2d");
-    canvas.width = (8 + 2 * p) * scale;
-    canvas.height = (8 + 2 * p) * scale;
-    ctx.imageSmoothingEnabled = false;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
     for (let y = 0; y < 8; y++)
       for (let x = 0; x < 8; x++) {
-        const fill = codeColor(grid[y][x], bodyHex);
+        const fill = cellFill(grid[y][x], paint, x, y);
         if (!fill) continue;
         ctx.fillStyle = fill;
         const px = Math.round((x + p + dx) * scale);
@@ -501,13 +497,24 @@ globalThis.Sycritters = (function () {
       }
   }
 
+  // Draw a critter into a canvas at an integer pixel scale (pad default 0).
+  function drawCanvas(canvas, grid, paint, scale, transform, pad) {
+    const p = pad || 0;
+    canvas.width = (8 + 2 * p) * scale;
+    canvas.height = (8 + 2 * p) * scale;
+    const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    paintCells(ctx, grid, paint, scale, transform, pad);
+  }
+
   // Serialize an 8x8 grid to an SVG string (one <rect> per filled cell).
-  function toSVG(grid, bodyHex, scale) {
+  function toSVG(grid, paint, scale) {
     const s = scale || 1;
     let rects = "";
     for (let y = 0; y < 8; y++)
       for (let x = 0; x < 8; x++) {
-        const fill = codeColor(grid[y][x], bodyHex);
+        const fill = cellFill(grid[y][x], paint, x, y);
         if (!fill) continue;
         rects += `<rect x="${x * s}" y="${y * s}" width="${s}" height="${s}" fill="${fill}"/>`;
       }
@@ -517,21 +524,40 @@ globalThis.Sycritters = (function () {
     );
   }
 
+  // --- moving gradient paint --------------------------------------------
+  function lerpHex(a, b, t) {
+    const ca = hexToRgb(a), cb = hexToRgb(b);
+    const f = (v) => ("0" + Math.round(v).toString(16)).slice(-2);
+    return "#" + f(ca[0] + (cb[0] - ca[0]) * t) + f(ca[1] + (cb[1] - ca[1]) * t) + f(ca[2] + (cb[2] - ca[2]) * t);
+  }
+  // Diagonal gradient between two colors, quantized into bands (pixel-art),
+  // scrolling with `offset` (advanced per frame for the moving effect).
+  function makeGradientPaint(a, b, offset) {
+    const BANDS = 5;
+    return (x, y) => {
+      const phase = (((x + y - offset) % 14) + 14) % 14; // 0..13 along the diagonal
+      const tri = Math.abs(phase / 7 - 1);               // 0..1..0 (seamless loop)
+      const band = Math.round(tri * (BANDS - 1)) / (BANDS - 1);
+      return lerpHex(a, b, band);
+    };
+  }
+
   /* ---- Playground ----------------------------------------------------- */
   const S = Sycritters;
-  const EDITOR_SCALE = 36;
+  const EDITOR_SCALE = 28; // 16 cells * 28 = 448px editor canvas
   const $ = (id) => document.getElementById(id);
   const els = {
     editor: $("editor"), seed: $("seed"), seedReadout: $("seedReadout"),
     rand: $("rand"), surprise: $("surprise"),
-    palette: $("palette"), tops: $("tops"), bottoms: $("bottoms"),
-    eyeStyle: $("eyeStyle"), eyeSpacing: $("eyeSpacing"), bodyAnim: $("bodyAnim"),
+    palette: $("palette"), colorMode: $("colorMode"), tops: $("tops"), bottoms: $("bottoms"),
+    eyeStyle: $("eyeStyle"), eyeGap: $("eyeGap"), bodyAnim: $("bodyAnim"),
     animColor: $("animColor"), animEyes: $("animEyes"),
     png: $("png"), svg: $("svg"), genWall: $("genWall"), grid: $("grid"),
   };
 
   let current = S.generate("sycritter");
   let bodyAnimMode = "none";
+  let lastFrame = -1;
 
   function newSeed() {
     return Math.floor(Math.random() * 0x100000000).toString(36);
@@ -547,10 +573,11 @@ globalThis.Sycritters = (function () {
     els.seed.value = current.seed;
     els.seedReadout.textContent = current.seed;
     syncControls();
+    lastFrame = -1; // force the loop to redraw the editor on the next frame
   }
 
   /* ---- animation -------------------------------------------------------- */
-  const EDITOR_PAD = 2; // cells of headroom around the editor critter
+  const EDITOR_PAD = 4; // 8 critter + 4 margin per side = a centered 16x16 grid
 
   // hex -> HSL hue rotation -> hex (for animated color).
   function hexToRgb(h) {
@@ -592,51 +619,79 @@ globalThis.Sycritters = (function () {
     return "#" + f(r) + f(g) + f(b);
   }
 
-  // Eye animation: deterministic function of time (smooth + resumable).
-  function eyeFrame(t) {
+  // All motion is quantized to 12fps integer frames -> pixel-art stepped.
+  const FPS = 12;
+
+  // Draw the 16x16 editor grid, then the centered critter, into the canvas.
+  function drawEditor(grid, paint, transform) {
+    const scale = EDITOR_SCALE, p = EDITOR_PAD, N = 8 + 2 * p; // 16
+    const canvas = els.editor;
+    canvas.width = N * scale; canvas.height = N * scale;
+    const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = "rgba(60,52,33,0.14)"; ctx.lineWidth = 1;
+    for (let i = 0; i <= N; i++) {
+      const q = i * scale + 0.5;
+      ctx.beginPath(); ctx.moveTo(q, 0); ctx.lineTo(q, canvas.height); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, q); ctx.lineTo(canvas.width, q); ctx.stroke();
+    }
+    paintCells(ctx, grid, paint, scale, transform, p);
+  }
+
+  // Body paint for a spec at a frame: gradient scrolls / solid hue-cycles.
+  function paintFor(spec, frame, animOn) {
+    if (spec.colorMode === "gradient")
+      return makeGradientPaint(spec.color.hex, spec.color2.hex, animOn ? frame : 0);
+    return animOn ? hueShift(spec.color.hex, (frame * 6) % 360) : spec.color.hex;
+  }
+  // Resting paint for static renders (wall tiles, exports).
+  function restPaint(spec) {
+    return spec.colorMode === "gradient"
+      ? makeGradientPaint(spec.color.hex, spec.color2.hex, 0)
+      : spec.color.hex;
+  }
+
+  // Eyes: gaze + blink as a function of the integer frame counter.
+  function eyeFrame(frame) {
     const dirs = [
       { dx: 1, dy: 0 }, { dx: 0, dy: 0 }, { dx: -1, dy: 0 }, { dx: 0, dy: 0 },
-      { dx: 1, dy: 1 }, { dx: 0, dy: 0 }, { dx: -1, dy: 0 }, { dx: 0, dy: 1 },
+      { dx: 1, dy: 1 }, { dx: 0, dy: 0 }, { dx: -1, dy: 1 }, { dx: 0, dy: 0 },
     ];
-    const gaze = dirs[Math.floor((t / 900) % dirs.length)];
-    const blink = t % 4200 < 130;
+    const gaze = dirs[Math.floor(frame / 11) % dirs.length];
+    const blink = frame % 48 < 2; // ~2 frames every 4s
     return { gaze, blink };
   }
 
-  // Body animation: returns a per-frame {dx,dy,squashY} pixel transform.
-  function bodyTransform(t) {
+  // Body motion in whole-pixel steps (pixel-art), keyed to the frame counter.
+  function bodyTransform(frame) {
     if (bodyAnimMode === "bob") {
-      return { dx: 0, dy: 0.22 * Math.sin(t / 430), squashY: 1 };
+      const seq = [0, 0, -1, -1];
+      return { dx: 0, dy: seq[frame % seq.length], squashY: 1 };
     }
     if (bodyAnimMode === "jump") {
-      const p = (t % 1150) / 1150;          // 0..1 per hop
-      const up = Math.max(0, Math.sin(p * Math.PI)); // arc
-      const squashY = p < 0.07 || p > 0.93 ? 0.85 : 1; // squash at the ground
-      return { dx: 0, dy: -1.7 * up, squashY };
+      const dyS = [0, -1, -2, -3, -3, -2, -1, 0, 0, 0, 0, 0];
+      const sqS = [1, 1, 1, 1, 1, 1, 1, 0.875, 1, 1, 1, 1];
+      const i = frame % dyS.length;
+      return { dx: 0, dy: dyS[i], squashY: sqS[i] };
     }
     if (bodyAnimMode === "walk") {
-      const sway = Math.sin(t / 200);
-      return { dx: 0.28 * sway, dy: -Math.abs(0.2 * sway), squashY: 1 };
+      const dxS = [0, 1, 1, 0, -1, -1], dyS = [0, -1, 0, 0, -1, 0];
+      const i = frame % dxS.length;
+      return { dx: dxS[i], dy: dyS[i], squashY: 1 };
     }
     return { dx: 0, dy: 0, squashY: 1 };
   }
 
-  function frameAt(t) {
-    const f = { gaze: { dx: 0, dy: 0 }, blink: false };
-    if (els.animEyes.checked) {
-      const e = eyeFrame(t);
-      f.gaze = e.gaze; f.blink = e.blink;
-    } else {
-      f.gaze = current.eyes.gaze || { dx: 0, dy: 0 };
-    }
-    let body = current.color.hex;
-    if (els.animColor.checked) body = hueShift(current.color.hex, (t * 0.045) % 360);
-    return { grid: S.rasterize(current, f), body };
+  function draw(frame) {
+    const f = { gaze: current.eyes.gaze || { dx: 0, dy: 0 }, blink: false };
+    if (els.animEyes.checked) { const e = eyeFrame(frame); f.gaze = e.gaze; f.blink = e.blink; }
+    drawEditor(S.rasterize(current, f), paintFor(current, frame, els.animColor.checked), bodyTransform(frame));
   }
 
   function loop(t) {
-    const { grid, body } = frameAt(t);
-    drawCanvas(els.editor, grid, body, EDITOR_SCALE, bodyTransform(t), EDITOR_PAD);
+    const frame = Math.floor(t / (1000 / FPS));
+    if (frame !== lastFrame) { lastFrame = frame; draw(frame); }
     requestAnimationFrame(loop);
   }
 
@@ -680,8 +735,9 @@ globalThis.Sycritters = (function () {
   function buildSegs() {
     buildSeg(els.tops, S.TOPS.map((m) => m.name), (v) => override({ top: v }), true);
     buildSeg(els.bottoms, S.BOTTOMS.map((m) => m.name), (v) => override({ bottom: v }), true);
-    buildSeg(els.eyeStyle, ["normal", "visor"], (v) => override({ eyes: { ...current.eyes, style: v } }), false);
-    buildSeg(els.eyeSpacing, ["close", "wide"], (v) => override({ eyes: { ...current.eyes, spacing: v } }), false);
+    buildSeg(els.eyeStyle, ["normal", "tall", "visor"], (v) => override({ eyes: { ...current.eyes, style: v } }), false);
+    buildSeg(els.eyeGap, ["0", "1", "2"], (v) => override({ eyes: { ...current.eyes, gap: Number(v) } }), false);
+    buildSeg(els.colorMode, ["solid", "gradient"], (v) => override({ colorMode: v }), false);
     buildSeg(els.bodyAnim, ["none", "bob", "jump", "walk"], (v) => { bodyAnimMode = v; }, false);
   }
 
@@ -690,10 +746,11 @@ globalThis.Sycritters = (function () {
   }
   function syncControls() {
     setPressed(els.palette, (b) => b.dataset.name === current.color.name);
+    setPressed(els.colorMode, (b) => b.dataset.value === current.colorMode);
     setPressed(els.tops, (b) => b.dataset.value === current.top);
     setPressed(els.bottoms, (b) => b.dataset.value === current.bottom);
     setPressed(els.eyeStyle, (b) => b.dataset.value === current.eyes.style);
-    setPressed(els.eyeSpacing, (b) => b.dataset.value === current.eyes.spacing);
+    setPressed(els.eyeGap, (b) => b.dataset.value === String(current.eyes.gap));
     setPressed(els.bodyAnim, (b) => b.dataset.value === bodyAnimMode);
   }
 
@@ -705,7 +762,7 @@ globalThis.Sycritters = (function () {
       const spec = S.generate(seed);
       const c = document.createElement("canvas");
       c.className = "tile"; c.dataset.seed = seed; c.title = seed;
-      drawCanvas(c, S.rasterize(spec), spec.color.hex, 16);
+      drawCanvas(c, S.rasterize(spec), restPaint(spec), 16);
       c.addEventListener("click", () => { setSeedAndRegen(seed); render(); window.scrollTo({ top: 0, behavior: "smooth" }); });
       els.grid.appendChild(c);
     }
@@ -714,13 +771,13 @@ globalThis.Sycritters = (function () {
   /* export */
   function downloadPNG(scale) {
     const c = document.createElement("canvas");
-    drawCanvas(c, S.rasterize(current), current.color.hex, scale || 32);
+    drawCanvas(c, S.rasterize(current), restPaint(current), scale || 32);
     const a = document.createElement("a");
     a.download = `sycritter-${current.seed}.png`;
     a.href = c.toDataURL("image/png"); a.click();
   }
   function downloadSVG(scale) {
-    const svg = toSVG(S.rasterize(current), current.color.hex, scale || 32);
+    const svg = toSVG(S.rasterize(current), restPaint(current), scale || 32);
     const a = document.createElement("a");
     a.download = `sycritter-${current.seed}.svg`;
     a.href = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
