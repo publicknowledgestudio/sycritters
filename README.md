@@ -12,8 +12,10 @@ Just open `index.html` in a browser. No build, no server, no dependencies.
   hit 🎲 for a random one, or **Surprise me**.
 - **Configure it.** Pick a body color and color mode (solid or a **moving
   gradient** between two colors), a top half (dome / notch / ears / antennae /
-  flat), a bottom half (flat / round / legs / splayed / spikes / tripod), and
-  eyes — style (normal / tall / visor) and a 0/1/2 px gap. Touching one control
+  flat), a bottom half (flat / round / legs / splayed / spikes / tripod), an
+  optional **asymmetric corner cut** (a diagonal slice off any one corner —
+  top/bottom × left/right), and eyes — style (normal / tall / visor) and a
+  0/1/2 px gap. Touching one control
   changes only that axis (lock-an-axis), so you can lock a shape and reroll the
   color.
 - **Animate it.** Toggle animated color (solid hue-cycles; gradient scrolls)

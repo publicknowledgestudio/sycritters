@@ -244,6 +244,11 @@
       </div>
 
       <div class="ctl">
+        <label class="ctl__label">&#9646; Corner <span style="color:var(--ink-dim)">— asymmetric cut</span></label>
+        <div id="corner" class="seg"></div>
+      </div>
+
+      <div class="ctl">
         <label class="ctl__label">&#9646; Eyes</label>
         <div id="eyeStyle" class="seg"></div>
         <div id="eyeGap" class="seg" title="px between the eyes"></div>
@@ -372,7 +377,9 @@ globalThis.Sycritters = (function () {
     const row = 2 + (r() < 0.5 ? 0 : 1);             // 2 or 3
     const gap = [0, 1, 2][Math.floor(r() * 3)];      // px between the two eyes
     const gaze = { dx: r() < 0.5 ? 0 : 1, dy: r() < 0.6 ? 0 : 1 }; // seeded resting gaze
-    return { seed: String(seed), color, color2, colorMode, top, bottom, edges, eyes: { style, row, gap, gaze } };
+    const corner = r() < 0.72 ? "none" : ["tl", "tr", "bl", "br"][Math.floor(r() * 4)];
+    const cornerSize = 2 + Math.floor(r() * 2); // 2 or 3 (diagonal depth)
+    return { seed: String(seed), color, color2, colorMode, top, bottom, edges, corner, cornerSize, eyes: { style, row, gap, gaze } };
   }
 
   // --- Rasterize: spec -> 8x8 grid of codes (0 empty,1 body,2 white,3 pupil)
@@ -401,8 +408,24 @@ globalThis.Sycritters = (function () {
       for (const y of [3, 4]) { g[y][0] = 0; g[y][7] = 0; }
     }
 
+    // Asymmetric diagonal corner cut (breaks left-right symmetry on purpose).
+    if (spec.corner && spec.corner !== "none") carveCorner(g, spec.corner, spec.cornerSize || 3);
+
     stampEyes(g, spec, frame);
     return g;
+  }
+
+  // Clear a diagonal staircase from one corner: row i clears (k - i) cells.
+  function carveCorner(g, corner, k) {
+    for (let i = 0; i < k; i++) {
+      const wide = k - i, yT = i, yB = 7 - i;
+      for (let j = 0; j < wide; j++) {
+        if (corner === "tr") g[yT][7 - j] = 0;
+        else if (corner === "tl") g[yT][j] = 0;
+        else if (corner === "br") g[yB][7 - j] = 0;
+        else if (corner === "bl") g[yB][j] = 0;
+      }
+    }
   }
 
   function stampEyes(g, spec, frame) {
@@ -455,7 +478,7 @@ globalThis.Sycritters = (function () {
           if (c === 2) hasWhite = true;
           if (c === 3) hasPupil = true;
         }
-      if (!symOk) failures.push([i, "symmetry"]);
+      if (!symOk && (spec.corner || "none") === "none") failures.push([i, "symmetry"]);
       if (!hasWhite || !hasPupil) failures.push([i, "eyes"]);
       if (JSON.stringify(g) !== JSON.stringify(rasterize(generate("seed-" + i))))
         failures.push([i, "determinism"]);
@@ -550,7 +573,7 @@ globalThis.Sycritters = (function () {
     editor: $("editor"), seed: $("seed"), seedReadout: $("seedReadout"),
     rand: $("rand"), surprise: $("surprise"),
     palette: $("palette"), colorMode: $("colorMode"), tops: $("tops"), bottoms: $("bottoms"),
-    eyeStyle: $("eyeStyle"), eyeGap: $("eyeGap"), bodyAnim: $("bodyAnim"),
+    corner: $("corner"), eyeStyle: $("eyeStyle"), eyeGap: $("eyeGap"), bodyAnim: $("bodyAnim"),
     animColor: $("animColor"), animEyes: $("animEyes"),
     png: $("png"), svg: $("svg"), genWall: $("genWall"), grid: $("grid"),
   };
@@ -735,6 +758,7 @@ globalThis.Sycritters = (function () {
   function buildSegs() {
     buildSeg(els.tops, S.TOPS.map((m) => m.name), (v) => override({ top: v }), true);
     buildSeg(els.bottoms, S.BOTTOMS.map((m) => m.name), (v) => override({ bottom: v }), true);
+    buildSeg(els.corner, ["none", "tl", "tr", "bl", "br"], (v) => override({ corner: v }), false);
     buildSeg(els.eyeStyle, ["normal", "tall", "visor"], (v) => override({ eyes: { ...current.eyes, style: v } }), false);
     buildSeg(els.eyeGap, ["0", "1", "2"], (v) => override({ eyes: { ...current.eyes, gap: Number(v) } }), false);
     buildSeg(els.colorMode, ["solid", "gradient"], (v) => override({ colorMode: v }), false);
@@ -749,6 +773,7 @@ globalThis.Sycritters = (function () {
     setPressed(els.colorMode, (b) => b.dataset.value === current.colorMode);
     setPressed(els.tops, (b) => b.dataset.value === current.top);
     setPressed(els.bottoms, (b) => b.dataset.value === current.bottom);
+    setPressed(els.corner, (b) => b.dataset.value === (current.corner || "none"));
     setPressed(els.eyeStyle, (b) => b.dataset.value === current.eyes.style);
     setPressed(els.eyeGap, (b) => b.dataset.value === String(current.eyes.gap));
     setPressed(els.bodyAnim, (b) => b.dataset.value === bodyAnimMode);
