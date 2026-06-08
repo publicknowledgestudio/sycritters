@@ -46,7 +46,20 @@ globalThis.Sycritters = (function () {
     return mulberry32(xmur3(String(seed))());
   }
 
-  return { VERSION, _test: { rng } };
+  // --- Curated palette ----------------------------------------------------
+  // Drawn from both reference images. Expandable: add entries freely.
+  const PALETTE = [
+    { name: "cyan",       hex: "#29abe2" },
+    { name: "pink",       hex: "#d6336c" },
+    { name: "lime",       hex: "#a0c814" },
+    { name: "periwinkle", hex: "#8c7bf0" },
+    { name: "orange",     hex: "#f7931e" },
+    { name: "blue",       hex: "#2e8fe0" },
+    { name: "spring",     hex: "#2be89c" },
+    { name: "purple",     hex: "#8b1a89" },
+  ];
+
+  return { VERSION, PALETTE, _test: { rng } };
 })();
 </script>
 <!-- SYCRITTERS-ENGINE:END -->
