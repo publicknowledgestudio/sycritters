@@ -15,7 +15,7 @@
 - **Grid codes:** `0 = empty (transparent)`, `1 = body`, `2 = eye-white`, `3 = pupil`.
 - **Coordinates:** `grid[y][x]`, `y=0` top, `x=0` left. 8×8. Left half = `x ∈ 0..3`; mirror maps `x → 7-x`.
 - **Module bit rows:** each module row is a 4-bit left-half pattern `[x0,x1,x2,x3]` where `x3` is adjacent to the mirror line.
-- **Run engine tests:** `node --test test/` — expected output shown per task.
+- **Run engine tests:** `node --test test/*.test.mjs` (glob excludes the `_engine.mjs` helper; bare `node --test test/` is treated as a module path in Node 23). Single file: `node --test test/<name>.test.mjs`.
 - **Commits:** conventional prefixes (`feat:`, `test:`, `chore:`). Commit after every green task.
 - **Engine purity rule:** code inside the `SYCRITTERS-ENGINE` block must NEVER touch `window`, `document`, or DOM. It exposes itself via `globalThis.Sycritters` so it works identically in the browser and in a `vm` context.
 
