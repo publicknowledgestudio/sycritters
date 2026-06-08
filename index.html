@@ -3,13 +3,280 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Sycritters</title>
+<title>Sycritters — pixel creature generator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet" />
 <style>
-  /* UI styles added in Task 9 */
+  :root {
+    --bg:      #121019;
+    --bg2:     #1c1a28;
+    --panel:   #211f2e;
+    --ink:     #ece8da;
+    --ink-dim: #8c88a3;
+    --line:    #322f41;
+    --accent:  #ffc63d;
+    --accent2: #ff5277;
+    --card:    #f4f1e6;
+    --card-line:#ded8c6;
+    --display: "Press Start 2P", ui-monospace, monospace;
+    --mono:    "VT323", ui-monospace, "Cascadia Mono", monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    font-family: var(--mono);
+    color: var(--ink);
+    background-color: var(--bg);
+    background-image: radial-gradient(var(--line) 1.2px, transparent 1.2px);
+    background-size: 26px 26px;
+    background-position: -2px -2px;
+    line-height: 1.15;
+  }
+
+  /* faint CRT scanlines over everything */
+  .scanlines {
+    position: fixed; inset: 0; z-index: 90; pointer-events: none;
+    background: repeating-linear-gradient(0deg, rgba(0,0,0,.16) 0 1px, transparent 1px 3px);
+    opacity: .5; mix-blend-mode: multiply;
+  }
+
+  #app { max-width: 1120px; margin: 0 auto; padding: 30px 22px 90px; }
+
+  /* ---- masthead ---- */
+  .masthead { margin: 6px 0 26px; }
+  .wordmark {
+    font-family: var(--display);
+    font-size: clamp(20px, 4.4vw, 38px);
+    margin: 0; letter-spacing: 2px; line-height: 1.1;
+    color: var(--accent);
+    text-shadow: 4px 4px 0 #000, 4px 4px 0 #000;
+  }
+  .wordmark b { color: var(--accent2); }
+  .tagline {
+    font-size: 22px; color: var(--ink-dim); margin: 10px 0 0;
+    letter-spacing: .5px;
+  }
+
+  /* ---- main stage ---- */
+  .stage {
+    display: grid; gap: 26px; align-items: start;
+    grid-template-columns: minmax(0, 1fr) 332px;
+  }
+  @media (max-width: 840px) { .stage { grid-template-columns: 1fr; } }
+
+  /* specimen (big editor) */
+  .specimen { display: flex; flex-direction: column; gap: 0; }
+  .specimen__card {
+    background-color: var(--card);
+    background-image:
+      linear-gradient(var(--card-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--card-line) 1px, transparent 1px);
+    background-size: 22px 22px;
+    border: 2px solid #000;
+    box-shadow: 8px 8px 0 rgba(0,0,0,.55);
+    display: grid; place-items: center;
+    padding: 7% ; aspect-ratio: 1 / 0.82;
+  }
+  #editor { image-rendering: pixelated; width: min(74%, 420px); height: auto; }
+  .specimen__plate {
+    display: flex; align-items: baseline; gap: 12px;
+    background: #000; color: var(--card);
+    border: 2px solid #000; border-top: none;
+    box-shadow: 8px 8px 0 rgba(0,0,0,.55);
+    padding: 7px 14px; font-size: 21px;
+  }
+  .specimen__plate .k { color: var(--accent); letter-spacing: 2px; }
+  .specimen__plate .v { color: var(--card); word-break: break-all; }
+
+  /* ---- controls ---- */
+  .controls { display: flex; flex-direction: column; gap: 16px; }
+  .ctl {
+    background: var(--panel);
+    border: 2px solid #000;
+    box-shadow: 4px 4px 0 #000;
+    padding: 12px 13px 14px;
+    opacity: 0; transform: translateY(10px);
+    animation: rise .45s cubic-bezier(.2,.8,.2,1) forwards;
+  }
+  .ctl:nth-child(1){animation-delay:.04s}
+  .ctl:nth-child(2){animation-delay:.10s}
+  .ctl:nth-child(3){animation-delay:.16s}
+  .ctl:nth-child(4){animation-delay:.22s}
+  .ctl:nth-child(5){animation-delay:.28s}
+  .ctl:nth-child(6){animation-delay:.34s}
+  .ctl:nth-child(7){animation-delay:.40s}
+  @keyframes rise { to { opacity: 1; transform: none; } }
+  .ctl__label {
+    display: block; font-size: 19px; letter-spacing: 1.5px;
+    text-transform: uppercase; color: var(--accent);
+    margin: 0 0 9px;
+  }
+
+  .field {
+    font-family: var(--mono); font-size: 21px;
+    background: #0d0c14; color: var(--ink);
+    border: 2px solid #000; padding: 3px 9px; width: 100%;
+    outline: none;
+  }
+  .field:focus { border-color: var(--accent); }
+
+  .btn {
+    font-family: var(--mono); font-size: 20px; line-height: 1;
+    text-transform: uppercase; letter-spacing: 1px;
+    background: var(--bg2); color: var(--ink);
+    border: 2px solid #000; box-shadow: 3px 3px 0 #000;
+    padding: 7px 13px; cursor: pointer; user-select: none;
+    transition: transform .05s, box-shadow .05s, background .12s, color .12s;
+  }
+  .btn:hover { background: var(--accent); color: #000; }
+  .btn:active { transform: translate(3px, 3px); box-shadow: 0 0 0 #000; }
+  .btn[aria-pressed="true"] { background: var(--accent); color: #000; }
+
+  .seedrow { display: flex; gap: 8px; margin-bottom: 10px; }
+  .seedrow .field { flex: 1; }
+  .btn--icon { padding: 4px 9px; font-size: 19px; }
+  .btn--full { width: 100%; }
+
+  .swatches { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin-bottom: 10px; }
+  .swatch {
+    aspect-ratio: 1; border: 2px solid #000; box-shadow: 2px 2px 0 #000;
+    cursor: pointer; padding: 0; position: relative;
+    transition: transform .06s;
+  }
+  .swatch:hover { transform: translate(-1px,-1px); }
+  .swatch[aria-pressed="true"]::after {
+    content: ""; position: absolute; inset: -5px;
+    border: 2px solid var(--accent); pointer-events: none;
+  }
+  .swatch--rand {
+    background: conic-gradient(#ff5277,#ffc63d,#2be89c,#2e8fe0,#8c7bf0,#ff5277);
+    color: #000; font-size: 16px; display: grid; place-items: center; font-weight: 700;
+  }
+
+  .seg { display: flex; flex-wrap: wrap; gap: 5px; }
+  .seg + .seg { margin-top: 6px; }
+  .seg button {
+    font-family: var(--mono); font-size: 18px; text-transform: uppercase;
+    background: var(--bg2); color: var(--ink-dim);
+    border: 2px solid #000; box-shadow: 2px 2px 0 #000;
+    padding: 4px 9px; cursor: pointer; letter-spacing: .5px;
+    transition: transform .05s, box-shadow .05s, background .12s, color .12s;
+  }
+  .seg button:hover { color: var(--ink); }
+  .seg button:active { transform: translate(2px,2px); box-shadow: 0 0 0 #000; }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: #000; box-shadow: 2px 2px 0 #000; }
+
+  .check {
+    display: flex; align-items: center; gap: 8px; margin-top: 11px;
+    font-size: 20px; color: var(--ink-dim); cursor: pointer; user-select: none;
+  }
+  .check input { width: 16px; height: 16px; accent-color: var(--accent2); cursor: pointer; }
+
+  .exportrow { display: flex; gap: 8px; }
+  .exportrow .btn { flex: 1; }
+
+  /* ---- the wall ---- */
+  .wall { margin-top: 34px; }
+  .wall__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; gap: 14px; }
+  .wall__head h2 {
+    font-family: var(--display); font-size: 15px; letter-spacing: 1px;
+    margin: 0; color: var(--ink); text-shadow: 2px 2px 0 #000;
+  }
+  .wall__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(82px, 1fr)); gap: 11px; }
+  .tile {
+    width: 100%; aspect-ratio: 1; image-rendering: pixelated;
+    background: var(--card); border: 2px solid #000; box-shadow: 3px 3px 0 #000;
+    padding: 9%; cursor: pointer;
+    transition: transform .09s, box-shadow .09s;
+  }
+  .tile:hover { transform: translate(-2px,-2px); box-shadow: 5px 5px 0 var(--accent); }
+  .tile:active { transform: translate(1px,1px); box-shadow: 1px 1px 0 var(--accent); }
+  .wall__empty { color: var(--ink-dim); font-size: 21px; padding: 20px 2px; }
+
+  .foot { margin-top: 40px; color: var(--ink-dim); font-size: 19px; letter-spacing: .5px; }
+  .foot a { color: var(--accent); text-decoration: none; }
+  .foot a:hover { text-decoration: underline; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ctl { animation: none; opacity: 1; transform: none; }
+  }
 </style>
 </head>
 <body>
-<main id="app"><!-- UI added in Task 9 --></main>
+<div class="scanlines" aria-hidden="true"></div>
+<main id="app">
+  <header class="masthead">
+    <h1 class="wordmark">SY<b>CRITTERS</b></h1>
+    <p class="tagline">an 8&times;8 pixel creature generator</p>
+  </header>
+
+  <section class="stage">
+    <div class="specimen">
+      <div class="specimen__card"><canvas id="editor" width="256" height="256"></canvas></div>
+      <div class="specimen__plate"><span class="k">SEED</span><span class="v" id="seedReadout">&mdash;</span></div>
+    </div>
+
+    <aside class="controls">
+      <div class="ctl">
+        <label class="ctl__label" for="seed">&#9646; Seed</label>
+        <div class="seedrow">
+          <input id="seed" class="field" spellcheck="false" autocomplete="off" />
+          <button id="rand" class="btn btn--icon" title="Random seed">&#127922;</button>
+        </div>
+        <button id="surprise" class="btn btn--full">Surprise me</button>
+      </div>
+
+      <div class="ctl">
+        <label class="ctl__label">&#9646; Color</label>
+        <div id="palette" class="swatches"></div>
+        <label class="check"><input type="checkbox" id="animColor" /> animate color</label>
+      </div>
+
+      <div class="ctl">
+        <label class="ctl__label">&#9646; Top</label>
+        <div id="tops" class="seg"></div>
+      </div>
+
+      <div class="ctl">
+        <label class="ctl__label">&#9646; Bottom</label>
+        <div id="bottoms" class="seg"></div>
+      </div>
+
+      <div class="ctl">
+        <label class="ctl__label">&#9646; Eyes</label>
+        <div id="eyeStyle" class="seg"></div>
+        <div id="eyeSpacing" class="seg"></div>
+        <label class="check"><input type="checkbox" id="animEyes" checked /> animate eyes</label>
+      </div>
+
+      <div class="ctl">
+        <label class="ctl__label">&#9646; Motion</label>
+        <div id="bodyAnim" class="seg"></div>
+      </div>
+
+      <div class="ctl">
+        <label class="ctl__label">&#9646; Export</label>
+        <div class="exportrow">
+          <button id="png" class="btn">PNG</button>
+          <button id="svg" class="btn">SVG</button>
+        </div>
+      </div>
+    </aside>
+  </section>
+
+  <section class="wall">
+    <div class="wall__head">
+      <h2>The Wall</h2>
+      <button id="genWall" class="btn">Generate &#9656;</button>
+    </div>
+    <div id="grid" class="wall__grid"><div class="wall__empty">press generate to fill the wall&hellip;</div></div>
+  </section>
+
+  <footer class="foot">made with pixels &middot; same seed &rarr; same critter</footer>
+</main>
 
 <!-- SYCRITTERS-ENGINE:START -->
 <script>
@@ -238,27 +505,138 @@ globalThis.Sycritters = (function () {
     );
   }
 
-  /* ---- TEMP probe (removed in Task 9) --------------------------------- */
-  (function probe() {
-    const app = document.getElementById("app");
-    const seeds = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot"];
-    const row = document.createElement("div");
-    row.style.cssText = "display:flex;gap:12px;flex-wrap:wrap;align-items:center;padding:16px;background:#222";
-    for (const seed of seeds) {
-      const spec = Sycritters.generate(seed);
-      const c = document.createElement("canvas");
-      c.style.cssText = "image-rendering:pixelated;border:1px solid #444";
-      drawCanvas(c, Sycritters.rasterize(spec), spec.color.hex, 24);
-      row.appendChild(c);
+  /* ---- Playground ----------------------------------------------------- */
+  const S = Sycritters;
+  const EDITOR_SCALE = 36;
+  const $ = (id) => document.getElementById(id);
+  const els = {
+    editor: $("editor"), seed: $("seed"), seedReadout: $("seedReadout"),
+    rand: $("rand"), surprise: $("surprise"),
+    palette: $("palette"), tops: $("tops"), bottoms: $("bottoms"),
+    eyeStyle: $("eyeStyle"), eyeSpacing: $("eyeSpacing"), bodyAnim: $("bodyAnim"),
+    animColor: $("animColor"), animEyes: $("animEyes"),
+    png: $("png"), svg: $("svg"), genWall: $("genWall"), grid: $("grid"),
+  };
+
+  let current = S.generate("sycritter");
+  let bodyAnimMode = "none";
+
+  function newSeed() {
+    return Math.floor(Math.random() * 0x100000000).toString(36);
+  }
+
+  // lock-an-axis: overrides mutate one axis, leaving the rest intact.
+  function override(patch) { current = { ...current, ...patch }; }
+  function setSeedAndRegen(seed) { current = S.generate(seed); }
+
+  // Static draw for now; replaced by the animation loop in a later task.
+  function render() {
+    drawCanvas(els.editor, S.rasterize(current), current.color.hex, EDITOR_SCALE);
+    els.seed.value = current.seed;
+    els.seedReadout.textContent = current.seed;
+    syncControls();
+  }
+
+  /* control builders */
+  function buildSwatches() {
+    els.palette.innerHTML = "";
+    for (const c of S.PALETTE) {
+      const b = document.createElement("button");
+      b.className = "swatch"; b.dataset.name = c.name;
+      b.style.background = c.hex; b.title = c.name;
+      b.addEventListener("click", () => { override({ color: c }); render(); });
+      els.palette.appendChild(b);
     }
-    // one SVG critter to verify the SVG renderer matches
-    const svgSpec = Sycritters.generate("alpha");
-    const wrap = document.createElement("div");
-    wrap.innerHTML = toSVG(Sycritters.rasterize(svgSpec), svgSpec.color.hex, 24);
-    wrap.style.cssText = "border:1px solid #0f0";
-    row.appendChild(wrap);
-    app.appendChild(row);
-  })();
+    const r = document.createElement("button");
+    r.className = "swatch swatch--rand"; r.textContent = "?"; r.title = "random color";
+    r.addEventListener("click", () => {
+      override({ color: S.PALETTE[Math.floor(Math.random() * S.PALETTE.length)] });
+      render();
+    });
+    els.palette.appendChild(r);
+  }
+
+  function buildSeg(container, values, onPick, withRandom) {
+    container.innerHTML = "";
+    for (const v of values) {
+      const b = document.createElement("button");
+      b.textContent = v; b.dataset.value = v;
+      b.addEventListener("click", () => { onPick(v); render(); });
+      container.appendChild(b);
+    }
+    if (withRandom) {
+      const b = document.createElement("button");
+      b.textContent = "🎲"; b.dataset.value = "__rand"; b.title = "randomize";
+      b.addEventListener("click", () => {
+        onPick(values[Math.floor(Math.random() * values.length)]); render();
+      });
+      container.appendChild(b);
+    }
+  }
+
+  function buildSegs() {
+    buildSeg(els.tops, S.TOPS.map((m) => m.name), (v) => override({ top: v }), true);
+    buildSeg(els.bottoms, S.BOTTOMS.map((m) => m.name), (v) => override({ bottom: v }), true);
+    buildSeg(els.eyeStyle, ["normal", "visor"], (v) => override({ eyes: { ...current.eyes, style: v } }), false);
+    buildSeg(els.eyeSpacing, ["close", "wide"], (v) => override({ eyes: { ...current.eyes, spacing: v } }), false);
+    buildSeg(els.bodyAnim, ["none", "bob", "jump", "walk"], (v) => { bodyAnimMode = v; }, false);
+  }
+
+  function setPressed(container, isOn) {
+    for (const b of container.children) b.setAttribute("aria-pressed", isOn(b) ? "true" : "false");
+  }
+  function syncControls() {
+    setPressed(els.palette, (b) => b.dataset.name === current.color.name);
+    setPressed(els.tops, (b) => b.dataset.value === current.top);
+    setPressed(els.bottoms, (b) => b.dataset.value === current.bottom);
+    setPressed(els.eyeStyle, (b) => b.dataset.value === current.eyes.style);
+    setPressed(els.eyeSpacing, (b) => b.dataset.value === current.eyes.spacing);
+    setPressed(els.bodyAnim, (b) => b.dataset.value === bodyAnimMode);
+  }
+
+  /* gallery wall */
+  function generateWall(n) {
+    els.grid.innerHTML = "";
+    for (let i = 0; i < (n || 28); i++) {
+      const seed = newSeed();
+      const spec = S.generate(seed);
+      const c = document.createElement("canvas");
+      c.className = "tile"; c.dataset.seed = seed; c.title = seed;
+      drawCanvas(c, S.rasterize(spec), spec.color.hex, 16);
+      c.addEventListener("click", () => { setSeedAndRegen(seed); render(); window.scrollTo({ top: 0, behavior: "smooth" }); });
+      els.grid.appendChild(c);
+    }
+  }
+
+  /* export */
+  function downloadPNG(scale) {
+    const c = document.createElement("canvas");
+    drawCanvas(c, S.rasterize(current), current.color.hex, scale || 32);
+    const a = document.createElement("a");
+    a.download = `sycritter-${current.seed}.png`;
+    a.href = c.toDataURL("image/png"); a.click();
+  }
+  function downloadSVG(scale) {
+    const svg = toSVG(S.rasterize(current), current.color.hex, scale || 32);
+    const a = document.createElement("a");
+    a.download = `sycritter-${current.seed}.svg`;
+    a.href = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+    a.click();
+  }
+
+  /* wiring */
+  els.seed.addEventListener("change", (e) => { setSeedAndRegen(e.target.value.trim() || newSeed()); render(); });
+  els.rand.addEventListener("click", () => { setSeedAndRegen(newSeed()); render(); });
+  els.surprise.addEventListener("click", () => { setSeedAndRegen(newSeed()); render(); });
+  els.animColor.addEventListener("change", render);
+  els.animEyes.addEventListener("change", render);
+  els.png.addEventListener("click", () => downloadPNG());
+  els.svg.addEventListener("click", () => downloadSVG());
+  els.genWall.addEventListener("click", () => generateWall());
+
+  buildSwatches();
+  buildSegs();
+  render();
 
   // Run engine invariant checks from the browser via index.html?test
   if (location.search.includes("test")) {
