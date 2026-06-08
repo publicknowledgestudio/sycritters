@@ -104,7 +104,68 @@ globalThis.Sycritters = (function () {
     };
   }
 
-  return { VERSION, PALETTE, TOPS, BOTTOMS, generate, randomSeed, _test: { rng } };
+  // --- Rasterize: spec -> 8x8 grid of codes (0 empty,1 body,2 white,3 pupil)
+  function moduleByName(group, name) {
+    return group.find((m) => m.name === name) || group[0];
+  }
+
+  function emptyGrid() {
+    return Array.from({ length: 8 }, () => new Array(8).fill(0));
+  }
+
+  // frame = { gaze:{dx,dy}, blink:bool } — optional; defaults to spec's eyes.
+  function rasterize(spec, frame) {
+    const g = emptyGrid();
+    const top = moduleByName(TOPS, spec.top);
+    const bottom = moduleByName(BOTTOMS, spec.bottom);
+    const halfRows = [...top.rows, ...bottom.rows]; // 8 rows × 4 left cols
+
+    // Fill left half + mirror for symmetry.
+    for (let y = 0; y < 8; y++)
+      for (let x = 0; x < 4; x++)
+        if (halfRows[y][x]) { g[y][x] = 1; g[y][7 - x] = 1; }
+
+    // Edge "bumps": carve a notch on the outer column mid-body.
+    if (spec.edges === "bumps") {
+      for (const y of [3, 4]) { g[y][0] = 0; g[y][7] = 0; }
+    }
+
+    stampEyes(g, spec, frame);
+    return g;
+  }
+
+  function stampEyes(g, spec, frame) {
+    const gaze = (frame && frame.gaze) || spec.eyes.gaze || { dx: 0, dy: 0 };
+    const blink = !!(frame && frame.blink);
+    const r0 = spec.eyes.row;                            // top row of the eye
+    const leftX = spec.eyes.spacing === "wide" ? 1 : 2;  // left eye starts here
+
+    // Only paint over body, so eyes never float in empty space.
+    const put = (x, y, code) => {
+      if (!g[y]) return;
+      if (g[y][x] === 1) g[y][x] = code;
+      else if (g[y][x] === 2 && code === 3) g[y][x] = 3;
+    };
+
+    if (spec.eyes.style === "visor") {
+      for (let x = 0; x < 8; x++) if (g[r0][x] === 1) g[r0][x] = 3; // black band
+      for (const ex of [leftX, 7 - leftX]) if (g[r0][ex] === 3) g[r0][ex] = 2; // holes
+      return;
+    }
+
+    // normal: two 2x2 white eyes (mirrored), pupil placed by gaze.
+    for (const baseX of [leftX, 7 - leftX - 1]) {
+      for (let dy = 0; dy < 2; dy++)
+        for (let dx = 0; dx < 2; dx++) put(baseX + dx, r0 + dy, 2);
+      if (!blink) {
+        const px = baseX + (gaze.dx > 0 ? 1 : 0);
+        const py = r0 + (gaze.dy > 0 ? 1 : 0);
+        put(px, py, 3);
+      }
+    }
+  }
+
+  return { VERSION, PALETTE, TOPS, BOTTOMS, generate, randomSeed, rasterize, _test: { rng } };
 })();
 </script>
 <!-- SYCRITTERS-ENGINE:END -->
