@@ -329,18 +329,22 @@ globalThis.Sycritters = (function () {
 
   function generate(seed) {
     const r = rng(seed);
-    const n = r() < 0.7 ? 2 : 3;                        // mostly 2 colors (calmer)
+    const n = r() < 0.85 ? 2 : 3;                       // mostly 2 colors (subtle)
     const start = Math.floor(r() * PALETTE.length);
     const colors = [];                                  // analogous run -> harmonious
     for (let j = 0; j < n; j++) colors.push(PALETTE[(start + j) % PALETTE.length]);
     const gradientDir = ["diagonal", "horizontal", "vertical", "radial"][Math.floor(r() * 4)];
     const gradientMotion = ["static", "drift", "pulse", "sheen"][Math.floor(r() * 4)];
-    const top = pick(r, TOPS).name;
-    const bottom = pick(r, BOTTOMS).name;
-    const waist = ["straight", "pinch", "narrow"][Math.floor(r() * 3)]; // the two middle rows
-    const k = r();
-    // bias to the clear 2x2 eyes; the subtle styles stay available but rarer
-    const style = k < 0.72 ? "normal" : k < 0.86 ? "tall" : k < 0.95 ? "visor" : "visor2";
+    const slant = (nm) => /^[23][tb][lr]$/.test(nm);
+    const deep = (nm) => /^3[tb][lr]$/.test(nm);          // deep slants read lopsided -> manual-only
+    const top = pick(r, TOPS.filter((m) => !deep(m.name))).name;
+    let bpool = BOTTOMS.filter((m) => !deep(m.name));
+    if (slant(top)) bpool = bpool.filter((m) => !slant(m.name)); // at most one slant
+    const bottom = pick(r, bpool).name;
+    let waist = ["straight", "straight", "straight", "pinch", "pinch", "narrow"][Math.floor(r() * 6)];
+    if ((slant(top) || slant(bottom)) && waist === "narrow") waist = "straight"; // slant already trims
+    // random keeps eyes clear (normal/tall); visors read as bars -> manual-only
+    const style = r() < 0.78 ? "normal" : "tall";
     const row = 2 + (r() < 0.5 ? 0 : 1);               // 2 or 3
     const gap = r() < 0.5 ? 1 : 2;                      // px between the eyes (no 0)
     const align = ["left", "center", "center", "right"][Math.floor(r() * 4)];
@@ -527,12 +531,12 @@ globalThis.Sycritters = (function () {
     const f = (v) => ("0" + Math.round(v).toString(16)).slice(-2);
     return "#" + f(ca[0] + (cb[0] - ca[0]) * t) + f(ca[1] + (cb[1] - ca[1]) * t) + f(ca[2] + (cb[2] - ca[2]) * t);
   }
-  // Cyclic multi-color blend at position t (any real; wraps over the colors).
+  // Linear multi-stop blend: t=0 -> colors[0], t=1 -> colors[last] (a clean ramp).
   function multiLerp(colors, t) {
-    const n = colors.length;
-    const pos = (((t % 1) + 1) % 1) * n; // 0..n
-    const i = Math.floor(pos) % n;
-    return lerpHex(colors[i], colors[(i + 1) % n], pos - Math.floor(pos));
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const seg = t * (colors.length - 1);
+    const i = Math.min(colors.length - 2, Math.floor(seg));
+    return lerpHex(colors[i], colors[i + 1], seg - i);
   }
 
   // Gradient body paint over 2-4 colors. `dir` lays out the blend; `motion`
@@ -540,22 +544,21 @@ globalThis.Sycritters = (function () {
   //   static = fixed · drift = slow scroll · pulse = gentle breathing
   //   · sheen = a soft highlight band sweeps across.
   function gradientPaint(colors, dir, motion, frame) {
-    const BANDS = 6;
+    const BANDS = 5;
     const pos = (x, y) =>
       dir === "horizontal" ? x / 7 :
       dir === "vertical"   ? y / 7 :
       dir === "radial"     ? Math.min(1, Math.hypot(x - 3.5, y - 3.5) / 4.95) :
                              (x + y) / 14;
     return (x, y) => {
-      const u = pos(x, y);
-      let phase = 0;
-      if (motion === "drift") phase = -frame / 42;
-      else if (motion === "pulse") phase = Math.sin(frame / 20) * 0.12;
-      const band = Math.round((((u + phase) % 1) + 1) % 1 * BANDS) / BANDS;
+      let u = pos(x, y);
+      if (motion === "drift") u += Math.sin(frame / 30) * 0.18;      // gentle slide
+      else if (motion === "pulse") u += Math.sin(frame / 22) * 0.12; // gentle breathe
+      const band = Math.round((u < 0 ? 0 : u > 1 ? 1 : u) * BANDS) / BANDS;
       let col = multiLerp(colors, band);
       if (motion === "sheen") {
-        const center = ((frame / 2) % 28) / 28; // 0..1 sweep
-        const amt = Math.max(0, 1 - Math.abs(u - center) * 6) * 0.5;
+        const center = ((frame / 2) % 28) / 28; // soft highlight sweep
+        const amt = Math.max(0, 1 - Math.abs(pos(x, y) - center) * 6) * 0.4;
         if (amt > 0) col = lerpHex(col, "#ffffff", amt);
       }
       return col;
