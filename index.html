@@ -165,13 +165,46 @@ globalThis.Sycritters = (function () {
     }
   }
 
-  return { VERSION, PALETTE, TOPS, BOTTOMS, generate, randomSeed, rasterize, _test: { rng } };
+  // --- Self test: sweep invariants over many generated critters ----------
+  function selfTest() {
+    const failures = [];
+    for (let i = 0; i < 300; i++) {
+      const spec = generate("seed-" + i);
+      const g = rasterize(spec);
+      if (g.length !== 8 || g.some((r) => r.length !== 8)) failures.push([i, "size"]);
+      let symOk = true, hasWhite = false, hasPupil = false;
+      for (let y = 0; y < 8; y++)
+        for (let x = 0; x < 8; x++) {
+          const c = g[y][x];
+          if (![0, 1, 2, 3].includes(c)) failures.push([i, "code", x, y]);
+          if ((g[y][x] === 1) !== (g[y][7 - x] === 1)) symOk = false;
+          if (c === 2) hasWhite = true;
+          if (c === 3) hasPupil = true;
+        }
+      if (!symOk) failures.push([i, "symmetry"]);
+      if (!hasWhite || !hasPupil) failures.push([i, "eyes"]);
+      if (JSON.stringify(g) !== JSON.stringify(rasterize(generate("seed-" + i))))
+        failures.push([i, "determinism"]);
+    }
+    return { passed: failures.length === 0, failures };
+  }
+
+  return { VERSION, PALETTE, TOPS, BOTTOMS, generate, randomSeed, rasterize, selfTest, _test: { rng } };
 })();
 </script>
 <!-- SYCRITTERS-ENGINE:END -->
 
 <script>
   /* Renderers (Tasks 7–8) and Playground (Tasks 9+) added below */
+
+  // Run engine invariant checks from the browser via index.html?test
+  if (location.search.includes("test")) {
+    const r = Sycritters.selfTest();
+    console.log(
+      r.passed ? "Sycritters selfTest: PASS" : "Sycritters selfTest: FAIL",
+      r.failures
+    );
+  }
 </script>
 </body>
 </html>
