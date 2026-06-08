@@ -13,8 +13,9 @@ Just open `index.html` in a browser. No build, no server, no dependencies.
   hit 🎲 for a random one, or **Surprise me**.
 - **Configure it.** Every critter is a **gradient** of 2–4 palette colors with a
   direction (diagonal / horizontal / vertical / radial). Pick a top half (dome /
-  notch / ears / antennae / flat + diagonal slants **tl / tr**), a bottom half
-  (flat / round / legs / splayed / spikes / tripod + slants **bl / br**), the
+  notch / ears / antennae / flat + diagonal slants **2tl/3tl/2tr/3tr**, shallow
+  or deep), a bottom half (flat / round / legs / splayed / spikes / tripod +
+  slants **2bl/3bl/2br/3br**), the
   **middle** two rows (straight / pinch / narrow), and eyes — style (normal /
   tall / visor / visor2), a 1 or 2 px gap, and left / center / right alignment.
   Touching one control changes only that axis (lock-an-axis).

@@ -24,9 +24,9 @@ test("silhouette is left-right symmetric for symmetric modules", () => {
   }
 });
 
-test("asymmetric top 'tr' carves the top-right diagonal staircase", () => {
+test("'3tr' carves a 3-step top-right diagonal staircase", () => {
   const spec = {
-    ...S.generate("x"), top: "tr", bottom: "flat", waist: "straight",
+    ...S.generate("x"), top: "3tr", bottom: "flat", waist: "straight",
     eyes: { style: "normal", row: 5, gap: 1, align: "center", gaze: { dx: 0, dy: 0 } },
   };
   const g = S.rasterize(spec);
@@ -34,6 +34,18 @@ test("asymmetric top 'tr' carves the top-right diagonal staircase", () => {
   assert.equal(g[1][6], 0); assert.equal(g[1][7], 0);
   assert.equal(g[2][7], 0);
   assert.equal(g[0][0], 1); assert.equal(g[1][0], 1); // left side intact
+});
+
+test("'2tr' is a shallower 2-step cut than '3tr'", () => {
+  const base = {
+    ...S.generate("x"), bottom: "flat", waist: "straight",
+    eyes: { style: "normal", row: 5, gap: 1, align: "center", gaze: { dx: 0, dy: 0 } },
+  };
+  const g = S.rasterize({ ...base, top: "2tr" });
+  assert.equal(g[0][6], 0); assert.equal(g[0][7], 0); // 2 cut on row 0
+  assert.equal(g[1][7], 0);                           // 1 cut on row 1
+  assert.equal(g[0][5], 1);                           // doesn't reach col 5
+  assert.equal(g[2][7], 1);                           // doesn't reach row 2
 });
 
 test("eye alignment shifts eyes left vs right", () => {
