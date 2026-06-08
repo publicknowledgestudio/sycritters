@@ -275,16 +275,17 @@ globalThis.Sycritters = (function () {
   }
 
   // --- Curated palette ----------------------------------------------------
-  // Drawn from both reference images. Expandable: add entries freely.
+  // Ordered around the hue wheel so consecutive entries are analogous
+  // (gradients are built from consecutive runs -> always harmonious).
   const PALETTE = [
-    { name: "cyan",       hex: "#29abe2" },
-    { name: "pink",       hex: "#d6336c" },
-    { name: "lime",       hex: "#a0c814" },
-    { name: "periwinkle", hex: "#8c7bf0" },
     { name: "orange",     hex: "#f7931e" },
-    { name: "blue",       hex: "#2e8fe0" },
+    { name: "lime",       hex: "#a0c814" },
     { name: "spring",     hex: "#2be89c" },
+    { name: "cyan",       hex: "#29abe2" },
+    { name: "blue",       hex: "#2e8fe0" },
+    { name: "periwinkle", hex: "#8c7bf0" },
     { name: "purple",     hex: "#8b1a89" },
+    { name: "pink",       hex: "#d6336c" },
   ];
 
   // --- Module vocabulary --------------------------------------------------
@@ -328,19 +329,18 @@ globalThis.Sycritters = (function () {
 
   function generate(seed) {
     const r = rng(seed);
-    const n = 2 + Math.floor(r() * 3);                 // 2..4 distinct gradient colors
-    const colors = [];
-    while (colors.length < n) {
-      const c = pick(r, PALETTE);
-      if (!colors.some((x) => x.name === c.name)) colors.push(c);
-    }
+    const n = r() < 0.7 ? 2 : 3;                        // mostly 2 colors (calmer)
+    const start = Math.floor(r() * PALETTE.length);
+    const colors = [];                                  // analogous run -> harmonious
+    for (let j = 0; j < n; j++) colors.push(PALETTE[(start + j) % PALETTE.length]);
     const gradientDir = ["diagonal", "horizontal", "vertical", "radial"][Math.floor(r() * 4)];
     const gradientMotion = ["static", "drift", "pulse", "sheen"][Math.floor(r() * 4)];
     const top = pick(r, TOPS).name;
     const bottom = pick(r, BOTTOMS).name;
     const waist = ["straight", "pinch", "narrow"][Math.floor(r() * 3)]; // the two middle rows
     const k = r();
-    const style = k < 0.1 ? "visor" : k < 0.2 ? "visor2" : k < 0.4 ? "tall" : "normal";
+    // bias to the clear 2x2 eyes; the subtle styles stay available but rarer
+    const style = k < 0.72 ? "normal" : k < 0.86 ? "tall" : k < 0.95 ? "visor" : "visor2";
     const row = 2 + (r() < 0.5 ? 0 : 1);               // 2 or 3
     const gap = r() < 0.5 ? 1 : 2;                      // px between the eyes (no 0)
     const align = ["left", "center", "center", "right"][Math.floor(r() * 4)];
@@ -675,35 +675,20 @@ globalThis.Sycritters = (function () {
     }
     const r = document.createElement("button");
     r.className = "swatch swatch--rand"; r.textContent = "?"; r.title = "shuffle colors";
-    r.addEventListener("click", () => { override({ colors: randomColors(current.colors.length) }); render(); });
+    r.addEventListener("click", () => { override({ colors: runFrom(Math.floor(Math.random() * S.PALETTE.length), current.colors.length) }); render(); });
     els.palette.appendChild(r);
   }
 
-  // distinct random palette colors
-  function randomColors(n) {
+  // analogous run of n consecutive palette colors from `startIdx` (harmonious)
+  function runFrom(startIdx, n) {
     const out = [];
-    while (out.length < n) {
-      const c = S.PALETTE[Math.floor(Math.random() * S.PALETTE.length)];
-      if (!out.some((x) => x.name === c.name)) out.push(c);
-    }
+    for (let j = 0; j < n; j++) out.push(S.PALETTE[(startIdx + j) % S.PALETTE.length]);
     return out;
   }
-  // make `c` the first gradient color (swap if already in the set)
-  function setPrimaryColor(c) {
-    const cs = current.colors.slice();
-    const i = cs.findIndex((x) => x.name === c.name);
-    if (i >= 0) [cs[0], cs[i]] = [cs[i], cs[0]]; else cs[0] = c;
-    override({ colors: cs });
-  }
-  function setColorCount(n) {
-    const cs = current.colors.slice();
-    while (cs.length < n) {
-      const c = S.PALETTE[Math.floor(Math.random() * S.PALETTE.length)];
-      if (!cs.some((x) => x.name === c.name)) cs.push(c);
-    }
-    cs.length = n;
-    override({ colors: cs });
-  }
+  const idxOf = (c) => S.PALETTE.findIndex((x) => x.name === c.name);
+  // clicking a swatch starts the run at that color (keeping the current count)
+  function setPrimaryColor(c) { override({ colors: runFrom(idxOf(c), current.colors.length) }); }
+  function setColorCount(n) { override({ colors: runFrom(idxOf(current.colors[0]), n) }); }
 
   function buildSeg(container, values, onPick, withRandom) {
     container.innerHTML = "";

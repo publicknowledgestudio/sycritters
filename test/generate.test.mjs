@@ -25,6 +25,17 @@ test("generate produces a spec with valid axes", () => {
   assert.ok(["static", "drift", "pulse", "sheen"].includes(spec.gradientMotion));
 });
 
+test("gradient colors are an analogous run (consecutive on the palette ring)", () => {
+  const N = S.PALETTE.length;
+  for (const seed of ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"]) {
+    const idx = S.generate(seed).colors.map((c) => S.PALETTE.findIndex((p) => p.name === c.name));
+    for (let i = 1; i < idx.length; i++) {
+      const step = (((idx[i] - idx[i - 1]) % N) + N) % N;
+      assert.equal(step, 1, `${seed}: colors not consecutive on the ring (${idx})`);
+    }
+  }
+});
+
 test("different seeds usually differ", () => {
   const seeds = ["a","b","c","d","e","f","g","h"];
   const specs = new Set(seeds.map(s => JSON.stringify(S.generate(s))));
