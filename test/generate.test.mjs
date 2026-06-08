@@ -20,8 +20,6 @@ test("generate produces a spec with valid axes", () => {
   assert.ok(spec.eyes.row >= 2 && spec.eyes.row <= 3);
   assert.ok(["solid", "gradient"].includes(spec.colorMode));
   assert.ok(S.PALETTE.some((c) => c.hex === spec.color2.hex), "color2 from palette");
-  assert.ok(["none", "tl", "tr", "bl", "br"].includes(spec.corner));
-  assert.ok([2, 3].includes(spec.cornerSize));
 });
 
 test("different seeds usually differ", () => {
