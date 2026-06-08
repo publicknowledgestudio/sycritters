@@ -195,7 +195,70 @@ globalThis.Sycritters = (function () {
 <!-- SYCRITTERS-ENGINE:END -->
 
 <script>
-  /* Renderers (Tasks 7–8) and Playground (Tasks 9+) added below */
+  /* ---- Renderers (consume engine output) ------------------------------ */
+
+  // Grid code -> fill style; null = leave transparent.
+  function codeColor(code, bodyHex) {
+    return code === 1 ? bodyHex : code === 2 ? "#ffffff" : code === 3 ? "#000000" : null;
+  }
+
+  // Draw an 8x8 grid into a canvas at an integer pixel scale.
+  // transform (optional) = { dx, dy, squashY } in *cell* units (body animation).
+  function drawCanvas(canvas, grid, bodyHex, scale, transform) {
+    const t = transform || { dx: 0, dy: 0, squashY: 1 };
+    const ctx = canvas.getContext("2d");
+    canvas.width = 8 * scale;
+    canvas.height = 8 * scale;
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (let y = 0; y < 8; y++)
+      for (let x = 0; x < 8; x++) {
+        const fill = codeColor(grid[y][x], bodyHex);
+        if (!fill) continue;
+        ctx.fillStyle = fill;
+        const px = Math.round((x + t.dx) * scale);
+        const py = Math.round((y * t.squashY + t.dy + 8 * (1 - t.squashY)) * scale);
+        ctx.fillRect(px, py, scale, Math.ceil(scale * t.squashY));
+      }
+  }
+
+  // Serialize an 8x8 grid to an SVG string (one <rect> per filled cell).
+  function toSVG(grid, bodyHex, scale) {
+    const s = scale || 1;
+    let rects = "";
+    for (let y = 0; y < 8; y++)
+      for (let x = 0; x < 8; x++) {
+        const fill = codeColor(grid[y][x], bodyHex);
+        if (!fill) continue;
+        rects += `<rect x="${x * s}" y="${y * s}" width="${s}" height="${s}" fill="${fill}"/>`;
+      }
+    return (
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${8 * s}" height="${8 * s}" ` +
+      `viewBox="0 0 ${8 * s} ${8 * s}" shape-rendering="crispEdges">${rects}</svg>`
+    );
+  }
+
+  /* ---- TEMP probe (removed in Task 9) --------------------------------- */
+  (function probe() {
+    const app = document.getElementById("app");
+    const seeds = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot"];
+    const row = document.createElement("div");
+    row.style.cssText = "display:flex;gap:12px;flex-wrap:wrap;align-items:center;padding:16px;background:#222";
+    for (const seed of seeds) {
+      const spec = Sycritters.generate(seed);
+      const c = document.createElement("canvas");
+      c.style.cssText = "image-rendering:pixelated;border:1px solid #444";
+      drawCanvas(c, Sycritters.rasterize(spec), spec.color.hex, 24);
+      row.appendChild(c);
+    }
+    // one SVG critter to verify the SVG renderer matches
+    const svgSpec = Sycritters.generate("alpha");
+    const wrap = document.createElement("div");
+    wrap.innerHTML = toSVG(Sycritters.rasterize(svgSpec), svgSpec.color.hex, 24);
+    wrap.style.cssText = "border:1px solid #0f0";
+    row.appendChild(wrap);
+    app.appendChild(row);
+  })();
 
   // Run engine invariant checks from the browser via index.html?test
   if (location.search.includes("test")) {
