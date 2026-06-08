@@ -59,7 +59,25 @@ globalThis.Sycritters = (function () {
     { name: "purple",     hex: "#8b1a89" },
   ];
 
-  return { VERSION, PALETTE, _test: { rng } };
+  // --- Module vocabulary --------------------------------------------------
+  // Each module is a 4x4 left-half block. Columns are left->center
+  // [x0,x1,x2,x3]; x3 abuts the mirror line. Tops fill rows 0-3, bottoms 4-7.
+  const TOPS = [
+    { name: "dome",     rows: [[0,0,1,1],[0,1,1,1],[1,1,1,1],[1,1,1,1]] },
+    { name: "flat",     rows: [[1,1,1,1],[1,1,1,1],[1,1,1,1],[1,1,1,1]] },
+    { name: "notch",    rows: [[0,0,1,0],[0,1,1,1],[1,1,1,1],[1,1,1,1]] },
+    { name: "ears",     rows: [[0,1,1,0],[0,1,1,0],[1,1,1,1],[1,1,1,1]] },
+    { name: "antennae", rows: [[1,0,0,1],[1,0,1,1],[1,1,1,1],[1,1,1,1]] },
+  ];
+  const BOTTOMS = [
+    { name: "flat",    rows: [[1,1,1,1],[1,1,1,1],[1,1,1,1],[1,1,1,1]] },
+    { name: "round",   rows: [[1,1,1,1],[1,1,1,1],[0,1,1,1],[0,0,1,1]] },
+    { name: "legs",    rows: [[1,1,1,1],[1,1,1,1],[1,1,1,1],[0,1,1,0]] },
+    { name: "splayed", rows: [[1,1,1,1],[1,1,1,1],[1,1,1,1],[1,1,0,0]] },
+    { name: "spikes",  rows: [[1,1,1,1],[1,1,1,1],[1,0,1,1],[1,0,0,1]] },
+  ];
+
+  return { VERSION, PALETTE, TOPS, BOTTOMS, _test: { rng } };
 })();
 </script>
 <!-- SYCRITTERS-ENGINE:END -->
