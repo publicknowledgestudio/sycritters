@@ -6,21 +6,18 @@
 <title>Sycritters — pixel creature generator</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
 <style>
   :root {
-    --bg:      #121019;
-    --bg2:     #1c1a28;
-    --panel:   #211f2e;
-    --ink:     #ece8da;
-    --ink-dim: #8c88a3;
-    --line:    #322f41;
-    --accent:  #ffc63d;
-    --accent2: #ff5277;
-    --card:    #f4f1e6;
-    --card-line:#ded8c6;
-    --display: "Press Start 2P", ui-monospace, monospace;
-    --mono:    "VT323", ui-monospace, "Cascadia Mono", monospace;
+    --bg:          #ffffff;
+    --surface:     #ffffff;
+    --border:      #d4d4d0;
+    --border-hover:#999999;
+    --text:        #1a1a1a;
+    --text-dim:    #888888;
+    --accent:      #ff3e00;
+    --display: "Silkscreen", ui-monospace, monospace;
+    --mono:    "DM Mono", ui-monospace, "Cascadia Mono", monospace;
   }
 
   * { box-sizing: border-box; }
@@ -28,182 +25,131 @@
   body {
     margin: 0;
     font-family: var(--mono);
-    color: var(--ink);
-    background-color: var(--bg);
-    background-image: radial-gradient(var(--line) 1.2px, transparent 1.2px);
-    background-size: 26px 26px;
-    background-position: -2px -2px;
-    line-height: 1.15;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    line-height: 1.4;
+  }
+  /* very subtle pixel-noise texture (from the 5x5 sibling project) */
+  body::before {
+    content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background-image: url("data:image/svg+xml,%3Csvg width='4' height='4' viewBox='0 0 4 4' xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='1' height='1' fill='%23000000' fill-opacity='0.02'/%3E%3C/svg%3E");
   }
 
-  /* faint CRT scanlines over everything */
-  .scanlines {
-    position: fixed; inset: 0; z-index: 90; pointer-events: none;
-    background: repeating-linear-gradient(0deg, rgba(0,0,0,.16) 0 1px, transparent 1px 3px);
-    opacity: .5; mix-blend-mode: multiply;
-  }
-
-  #app { max-width: 1120px; margin: 0 auto; padding: 30px 22px 90px; }
+  #app { position: relative; z-index: 1; max-width: 1000px; margin: 0 auto; padding: 32px 28px 96px; }
 
   /* ---- masthead ---- */
-  .masthead { margin: 6px 0 26px; }
+  .masthead { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; margin-bottom: 36px; }
   .wordmark {
-    font-family: var(--display);
-    font-size: clamp(20px, 4.4vw, 38px);
-    margin: 0; letter-spacing: 2px; line-height: 1.1;
-    color: var(--accent);
-    text-shadow: 4px 4px 0 #000, 4px 4px 0 #000;
+    font-family: var(--display); font-weight: 700;
+    font-size: 28px; letter-spacing: 2px; line-height: 1; margin: 0; color: var(--text);
   }
-  .wordmark b { color: var(--accent2); }
-  .tagline {
-    font-size: 22px; color: var(--ink-dim); margin: 10px 0 0;
-    letter-spacing: .5px;
-  }
+  .wordmark b { color: var(--accent); font-weight: 700; }
+  .tagline { font-size: 11px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; }
 
   /* ---- main stage ---- */
-  .stage {
-    display: grid; gap: 26px; align-items: start;
-    grid-template-columns: minmax(0, 1fr) 332px;
-  }
-  @media (max-width: 840px) { .stage { grid-template-columns: 1fr; } }
+  .stage { display: grid; gap: 40px; align-items: start; grid-template-columns: minmax(0, 1fr) 280px; }
+  @media (max-width: 820px) { .stage { grid-template-columns: 1fr; } }
 
-  /* specimen (big editor) */
-  .specimen { display: flex; flex-direction: column; gap: 0; }
+  /* specimen (the editor preview) */
+  .specimen { display: flex; flex-direction: column; gap: 12px; }
   .specimen__card {
-    background-color: var(--card);
-    border: 2px solid #000;
-    box-shadow: 8px 8px 0 rgba(0,0,0,.55);
-    display: grid; place-items: center;
-    padding: 14px; aspect-ratio: 1;
+    background: var(--surface); border: 1px solid var(--border);
+    display: grid; place-items: center; padding: 16px; aspect-ratio: 1;
   }
-  /* the 16x16 grid is drawn into the canvas itself, behind the centered critter */
-  #editor { image-rendering: pixelated; width: 100%; max-width: 452px; height: auto; }
+  #editor { image-rendering: pixelated; width: 100%; max-width: 460px; height: auto; display: block; }
   .specimen__plate {
-    display: flex; align-items: baseline; gap: 12px;
-    background: #000; color: var(--card);
-    border: 2px solid #000; border-top: none;
-    box-shadow: 8px 8px 0 rgba(0,0,0,.55);
-    padding: 7px 14px; font-size: 21px;
+    display: flex; align-items: baseline; gap: 10px;
+    font-size: 11px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase;
   }
-  .specimen__plate .k { color: var(--accent); letter-spacing: 2px; }
-  .specimen__plate .v { color: var(--card); word-break: break-all; }
+  .specimen__plate .k { color: var(--accent); }
+  .specimen__plate .v { color: var(--text); text-transform: none; word-break: break-all; }
 
   /* ---- controls ---- */
-  .controls { display: flex; flex-direction: column; gap: 16px; }
-  .ctl {
-    background: var(--panel);
-    border: 2px solid #000;
-    box-shadow: 4px 4px 0 #000;
-    padding: 12px 13px 14px;
-    opacity: 0; transform: translateY(10px);
-    animation: rise .45s cubic-bezier(.2,.8,.2,1) forwards;
-  }
-  .ctl:nth-child(1){animation-delay:.04s}
-  .ctl:nth-child(2){animation-delay:.10s}
-  .ctl:nth-child(3){animation-delay:.16s}
-  .ctl:nth-child(4){animation-delay:.22s}
-  .ctl:nth-child(5){animation-delay:.28s}
-  .ctl:nth-child(6){animation-delay:.34s}
-  .ctl:nth-child(7){animation-delay:.40s}
-  @keyframes rise { to { opacity: 1; transform: none; } }
+  .controls { display: flex; flex-direction: column; gap: 20px; }
+  .ctl { background: var(--surface); border: 1px solid var(--border); padding: 16px; }
   .ctl__label {
-    display: block; font-size: 19px; letter-spacing: 1.5px;
-    text-transform: uppercase; color: var(--accent);
-    margin: 0 0 9px;
+    display: block; font-family: var(--display); font-size: 10px; letter-spacing: 2px;
+    text-transform: uppercase; color: var(--text-dim);
+    margin: 0 0 14px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
   }
+  .ctl__label span { font-family: var(--mono); letter-spacing: .5px; text-transform: none; }
 
   .field {
-    font-family: var(--mono); font-size: 21px;
-    background: #0d0c14; color: var(--ink);
-    border: 2px solid #000; padding: 3px 9px; width: 100%;
-    outline: none;
+    font-family: var(--mono); font-size: 12px; color: var(--text);
+    background: var(--surface); border: 1px solid var(--border);
+    padding: 7px 9px; width: 100%; outline: none; transition: border-color .15s;
   }
   .field:focus { border-color: var(--accent); }
 
   .btn {
-    font-family: var(--mono); font-size: 20px; line-height: 1;
-    text-transform: uppercase; letter-spacing: 1px;
-    background: var(--bg2); color: var(--ink);
-    border: 2px solid #000; box-shadow: 3px 3px 0 #000;
-    padding: 7px 13px; cursor: pointer; user-select: none;
-    transition: transform .05s, box-shadow .05s, background .12s, color .12s;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    font-family: var(--display); font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
+    background: var(--surface); color: var(--text); border: 1px solid var(--border);
+    padding: 9px 12px; cursor: pointer; user-select: none; transition: all .12s;
   }
-  .btn:hover { background: var(--accent); color: #000; }
-  .btn:active { transform: translate(3px, 3px); box-shadow: 0 0 0 #000; }
-  .btn[aria-pressed="true"] { background: var(--accent); color: #000; }
+  .btn:hover { border-color: var(--text); background: var(--text); color: var(--surface); }
+  .btn:active { transform: scale(.97); }
 
-  .seedrow { display: flex; gap: 8px; margin-bottom: 10px; }
+  .seedrow { display: flex; gap: 8px; margin-bottom: 8px; }
   .seedrow .field { flex: 1; }
-  .btn--icon { padding: 4px 9px; font-size: 19px; }
+  .btn--icon { padding: 7px 10px; font-size: 12px; }
   .btn--full { width: 100%; }
 
-  .swatches { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin-bottom: 10px; }
+  .swatches { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 12px; }
   .swatch {
-    aspect-ratio: 1; border: 2px solid #000; box-shadow: 2px 2px 0 #000;
-    cursor: pointer; padding: 0; position: relative;
-    transition: transform .06s;
+    aspect-ratio: 1; border: 1px solid var(--border); cursor: pointer; padding: 0;
+    position: relative; transition: border-color .12s;
   }
-  .swatch:hover { transform: translate(-1px,-1px); }
-  .swatch[aria-pressed="true"]::after {
-    content: ""; position: absolute; inset: -5px;
-    border: 2px solid var(--accent); pointer-events: none;
-  }
+  .swatch:hover { border-color: var(--border-hover); }
+  .swatch[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
   .swatch--rand {
-    background: conic-gradient(#ff5277,#ffc63d,#2be89c,#2e8fe0,#8c7bf0,#ff5277);
-    color: #000; font-size: 16px; display: grid; place-items: center; font-weight: 700;
+    background: conic-gradient(#ff3e00,#ffc63d,#2be89c,#2e8fe0,#8c7bf0,#ff3e00);
+    color: #fff; font-size: 12px; display: grid; place-items: center; font-weight: 700;
+    text-shadow: 0 1px 1px rgba(0,0,0,.45);
   }
 
-  .seg { display: flex; flex-wrap: wrap; gap: 5px; }
-  .seg + .seg { margin-top: 6px; }
+  .seg { display: flex; flex-wrap: wrap; gap: 6px; }
+  .seg + .seg { margin-top: 8px; }
   .seg button {
-    font-family: var(--mono); font-size: 18px; text-transform: uppercase;
-    background: var(--bg2); color: var(--ink-dim);
-    border: 2px solid #000; box-shadow: 2px 2px 0 #000;
-    padding: 4px 9px; cursor: pointer; letter-spacing: .5px;
-    transition: transform .05s, box-shadow .05s, background .12s, color .12s;
+    font-family: var(--mono); font-size: 11px; letter-spacing: .5px; text-transform: uppercase;
+    background: var(--surface); color: var(--text-dim); border: 1px solid var(--border);
+    padding: 5px 9px; cursor: pointer; transition: all .12s;
   }
-  .seg button:hover { color: var(--ink); }
-  .seg button:active { transform: translate(2px,2px); box-shadow: 0 0 0 #000; }
-  .seg button[aria-pressed="true"] { background: var(--accent); color: #000; box-shadow: 2px 2px 0 #000; }
+  .seg button:hover { border-color: var(--border-hover); color: var(--text); }
+  .seg button[aria-pressed="true"] { background: var(--text); color: var(--surface); border-color: var(--text); }
 
   .check {
-    display: flex; align-items: center; gap: 8px; margin-top: 11px;
-    font-size: 20px; color: var(--ink-dim); cursor: pointer; user-select: none;
+    display: flex; align-items: center; gap: 8px; margin-top: 12px;
+    font-size: 12px; color: var(--text-dim); cursor: pointer; user-select: none;
   }
-  .check input { width: 16px; height: 16px; accent-color: var(--accent2); cursor: pointer; }
+  .check input { width: 14px; height: 14px; accent-color: var(--accent); cursor: pointer; }
 
   .exportrow { display: flex; gap: 8px; }
   .exportrow .btn { flex: 1; }
 
   /* ---- the wall ---- */
-  .wall { margin-top: 34px; }
-  .wall__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; gap: 14px; }
+  .wall { margin-top: 44px; }
+  .wall__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; gap: 14px; }
   .wall__head h2 {
-    font-family: var(--display); font-size: 15px; letter-spacing: 1px;
-    margin: 0; color: var(--ink); text-shadow: 2px 2px 0 #000;
+    font-family: var(--display); font-size: 12px; letter-spacing: 2px; text-transform: uppercase;
+    margin: 0; color: var(--text);
   }
-  .wall__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(82px, 1fr)); gap: 11px; }
+  .wall__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 10px; }
   .tile {
     width: 100%; aspect-ratio: 1; image-rendering: pixelated;
-    background: var(--card); border: 2px solid #000; box-shadow: 3px 3px 0 #000;
-    padding: 9%; cursor: pointer;
-    transition: transform .09s, box-shadow .09s;
+    background: var(--surface); border: 1px solid var(--border); padding: 8%; cursor: pointer;
+    transition: border-color .12s;
   }
-  .tile:hover { transform: translate(-2px,-2px); box-shadow: 5px 5px 0 var(--accent); }
-  .tile:active { transform: translate(1px,1px); box-shadow: 1px 1px 0 var(--accent); }
-  .wall__empty { color: var(--ink-dim); font-size: 21px; padding: 20px 2px; }
+  .tile:hover { border-color: var(--accent); }
+  .wall__empty { color: var(--text-dim); font-size: 12px; padding: 16px 2px; }
 
-  .foot { margin-top: 40px; color: var(--ink-dim); font-size: 19px; letter-spacing: .5px; }
+  .foot { margin-top: 44px; color: var(--text-dim); font-size: 11px; letter-spacing: .5px; text-transform: uppercase; }
   .foot a { color: var(--accent); text-decoration: none; }
   .foot a:hover { text-decoration: underline; }
-
-  @media (prefers-reduced-motion: reduce) {
-    .ctl { animation: none; opacity: 1; transform: none; }
-  }
 </style>
 </head>
 <body>
-<div class="scanlines" aria-hidden="true"></div>
 <main id="app">
   <header class="masthead">
     <h1 class="wordmark">SY<b>CRITTERS</b></h1>
@@ -230,7 +176,8 @@
         <label class="ctl__label">&#9646; Color</label>
         <div id="palette" class="swatches"></div>
         <div id="colorMode" class="seg"></div>
-        <label class="check"><input type="checkbox" id="animColor" /> animate / move</label>
+        <label class="check"><input type="checkbox" id="animColor" /> animate (solid)</label>
+        <div id="gradMotion" class="seg" title="gradient motion"></div>
       </div>
 
       <div class="ctl">
@@ -378,7 +325,8 @@ globalThis.Sycritters = (function () {
     const row = 2 + (r() < 0.5 ? 0 : 1);             // 2 or 3
     const gap = [0, 1, 2][Math.floor(r() * 3)];      // px between the two eyes
     const gaze = { dx: r() < 0.5 ? 0 : 1, dy: r() < 0.6 ? 0 : 1 }; // seeded resting gaze
-    return { seed: String(seed), color, color2, colorMode, top, bottom, edges, eyes: { style, row, gap, gaze } };
+    const gradientMotion = ["static", "drift", "pulse", "sheen"][Math.floor(r() * 4)];
+    return { seed: String(seed), color, color2, colorMode, gradientMotion, top, bottom, edges, eyes: { style, row, gap, gaze } };
   }
 
   // --- Rasterize: spec -> 8x8 grid of codes (0 empty,1 body,2 white,3 pupil)
@@ -543,26 +491,37 @@ globalThis.Sycritters = (function () {
     const f = (v) => ("0" + Math.round(v).toString(16)).slice(-2);
     return "#" + f(ca[0] + (cb[0] - ca[0]) * t) + f(ca[1] + (cb[1] - ca[1]) * t) + f(ca[2] + (cb[2] - ca[2]) * t);
   }
-  // Diagonal gradient between two colors, quantized into bands (pixel-art),
-  // scrolling with `offset` (advanced per frame for the moving effect).
-  function makeGradientPaint(a, b, offset) {
-    const BANDS = 5;
+  // Gradient body paint: a diagonal blend between two colors, quantized into
+  // bands (pixel-art). `motion` picks a subtle animation over `frame`:
+  //   static = fixed · drift = slow diagonal scroll · pulse = gentle breathing
+  //   · sheen = a soft highlight band sweeps across.
+  function gradientPaint(a, b, motion, frame) {
+    const BANDS = 6;
     return (x, y) => {
-      const phase = (((x + y - offset) % 14) + 14) % 14; // 0..13 along the diagonal
-      const tri = Math.abs(phase / 7 - 1);               // 0..1..0 (seamless loop)
-      const band = Math.round(tri * (BANDS - 1)) / (BANDS - 1);
+      const d = x + y; // 0..14 along the diagonal
+      let t;
+      if (motion === "pulse") {
+        t = 0.5 + 0.45 * Math.sin(frame / 20 - d * 0.1);
+      } else if (motion === "sheen") {
+        const center = ((frame / 2) % 26) - 6; // slow highlight sweep
+        t = Math.max(0, 1 - Math.abs(d - center) / 3.5);
+      } else {
+        const off = motion === "drift" ? frame / 3 : 0; // drift scrolls slowly
+        t = Math.abs(((((d - off) % 14) + 14) % 14) / 7 - 1);
+      }
+      const band = Math.round(Math.min(1, Math.max(0, t)) * (BANDS - 1)) / (BANDS - 1);
       return lerpHex(a, b, band);
     };
   }
 
   /* ---- Playground ----------------------------------------------------- */
   const S = Sycritters;
-  const EDITOR_SCALE = 28; // 16 cells * 28 = 448px editor canvas
+  const EDITOR_SCALE = 28; // px per cell in the editor canvas
   const $ = (id) => document.getElementById(id);
   const els = {
     editor: $("editor"), seed: $("seed"), seedReadout: $("seedReadout"),
     rand: $("rand"), surprise: $("surprise"),
-    palette: $("palette"), colorMode: $("colorMode"), tops: $("tops"), bottoms: $("bottoms"),
+    palette: $("palette"), colorMode: $("colorMode"), gradMotion: $("gradMotion"), tops: $("tops"), bottoms: $("bottoms"),
     eyeStyle: $("eyeStyle"), eyeGap: $("eyeGap"), bodyAnim: $("bodyAnim"),
     animColor: $("animColor"), animEyes: $("animEyes"),
     png: $("png"), svg: $("svg"), genWall: $("genWall"), grid: $("grid"),
@@ -590,7 +549,7 @@ globalThis.Sycritters = (function () {
   }
 
   /* ---- animation -------------------------------------------------------- */
-  const EDITOR_PAD = 4; // 8 critter + 4 margin per side = a centered 16x16 grid
+  const EDITOR_PAD = 2; // cells of margin around the critter (headroom for jumps)
 
   // hex -> HSL hue rotation -> hex (for animated color).
   function hexToRgb(h) {
@@ -635,33 +594,17 @@ globalThis.Sycritters = (function () {
   // All motion is quantized to 12fps integer frames -> pixel-art stepped.
   const FPS = 12;
 
-  // Draw the 16x16 editor grid, then the centered critter, into the canvas.
-  function drawEditor(grid, paint, transform) {
-    const scale = EDITOR_SCALE, p = EDITOR_PAD, N = 8 + 2 * p; // 16
-    const canvas = els.editor;
-    canvas.width = N * scale; canvas.height = N * scale;
-    const ctx = canvas.getContext("2d");
-    ctx.imageSmoothingEnabled = false;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.strokeStyle = "rgba(60,52,33,0.14)"; ctx.lineWidth = 1;
-    for (let i = 0; i <= N; i++) {
-      const q = i * scale + 0.5;
-      ctx.beginPath(); ctx.moveTo(q, 0); ctx.lineTo(q, canvas.height); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, q); ctx.lineTo(canvas.width, q); ctx.stroke();
-    }
-    paintCells(ctx, grid, paint, scale, transform, p);
-  }
-
-  // Body paint for a spec at a frame: gradient scrolls / solid hue-cycles.
-  function paintFor(spec, frame, animOn) {
+  // Body paint for a spec at a frame: gradient animates per its motion mode;
+  // solid optionally hue-cycles when "animate color" is on.
+  function paintFor(spec, frame, animColorOn) {
     if (spec.colorMode === "gradient")
-      return makeGradientPaint(spec.color.hex, spec.color2.hex, animOn ? frame : 0);
-    return animOn ? hueShift(spec.color.hex, (frame * 6) % 360) : spec.color.hex;
+      return gradientPaint(spec.color.hex, spec.color2.hex, spec.gradientMotion || "drift", frame);
+    return animColorOn ? hueShift(spec.color.hex, (frame * 6) % 360) : spec.color.hex;
   }
   // Resting paint for static renders (wall tiles, exports).
   function restPaint(spec) {
     return spec.colorMode === "gradient"
-      ? makeGradientPaint(spec.color.hex, spec.color2.hex, 0)
+      ? gradientPaint(spec.color.hex, spec.color2.hex, "static", 0)
       : spec.color.hex;
   }
 
@@ -683,8 +626,8 @@ globalThis.Sycritters = (function () {
       return { dx: 0, dy: seq[frame % seq.length], squashY: 1 };
     }
     if (bodyAnimMode === "jump") {
-      const dyS = [0, -1, -2, -3, -3, -2, -1, 0, 0, 0, 0, 0];
-      const sqS = [1, 1, 1, 1, 1, 1, 1, 0.875, 1, 1, 1, 1];
+      const dyS = [0, -1, -2, -2, -1, 0, 0, 0, 0, 0, 0, 0];
+      const sqS = [1, 1, 1, 1, 1, 0.88, 1, 1, 1, 1, 1, 1];
       const i = frame % dyS.length;
       return { dx: 0, dy: dyS[i], squashY: sqS[i] };
     }
@@ -699,7 +642,8 @@ globalThis.Sycritters = (function () {
   function draw(frame) {
     const f = { gaze: current.eyes.gaze || { dx: 0, dy: 0 }, blink: false };
     if (els.animEyes.checked) { const e = eyeFrame(frame); f.gaze = e.gaze; f.blink = e.blink; }
-    drawEditor(S.rasterize(current, f), paintFor(current, frame, els.animColor.checked), bodyTransform(frame));
+    drawCanvas(els.editor, S.rasterize(current, f), paintFor(current, frame, els.animColor.checked),
+      EDITOR_SCALE, bodyTransform(frame), EDITOR_PAD);
   }
 
   function loop(t) {
@@ -751,6 +695,7 @@ globalThis.Sycritters = (function () {
     buildSeg(els.eyeStyle, ["normal", "tall", "visor"], (v) => override({ eyes: { ...current.eyes, style: v } }), false);
     buildSeg(els.eyeGap, ["0", "1", "2"], (v) => override({ eyes: { ...current.eyes, gap: Number(v) } }), false);
     buildSeg(els.colorMode, ["solid", "gradient"], (v) => override({ colorMode: v }), false);
+    buildSeg(els.gradMotion, ["static", "drift", "pulse", "sheen"], (v) => override({ gradientMotion: v }), false);
     buildSeg(els.bodyAnim, ["none", "bob", "jump", "walk"], (v) => { bodyAnimMode = v; }, false);
   }
 
@@ -760,6 +705,7 @@ globalThis.Sycritters = (function () {
   function syncControls() {
     setPressed(els.palette, (b) => b.dataset.name === current.color.name);
     setPressed(els.colorMode, (b) => b.dataset.value === current.colorMode);
+    setPressed(els.gradMotion, (b) => b.dataset.value === (current.gradientMotion || "drift"));
     setPressed(els.tops, (b) => b.dataset.value === current.top);
     setPressed(els.bottoms, (b) => b.dataset.value === current.bottom);
     setPressed(els.eyeStyle, (b) => b.dataset.value === current.eyes.style);

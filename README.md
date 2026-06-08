@@ -2,7 +2,8 @@
 
 A generator for **Sycritters** — 8×8 pixel creatures in one cohesive style.
 Everything lives in a single [`index.html`](index.html): a tiny, dependency-free
-engine plus an "arcade specimen lab" playground.
+engine plus a clean, flat playground (visually aligned with its sibling project,
+`5x5`).
 
 ## Use it
 
@@ -16,10 +17,10 @@ Just open `index.html` in a browser. No build, no server, no dependencies.
   round / legs / splayed / spikes / tripod, plus slants **bl / br**), and eyes —
   style (normal / tall / visor) and a 0/1/2 px gap. Touching one control changes
   only that axis (lock-an-axis), so you can lock a shape and reroll the color.
-- **Animate it.** Toggle animated color (solid hue-cycles; gradient scrolls)
-  and animated eyes (blink + look-around), and give it body motion (bob / jump
-  / walk). All motion runs at **12fps in whole-pixel steps** for a true
-  pixel-art feel.
+- **Animate it.** Solid colors can hue-cycle; **gradients** have subtle motion
+  modes — `static / drift / pulse / sheen`. Eyes blink + look around, and the
+  body can bob / jump / walk. All motion runs at **12fps in whole-pixel steps**
+  for a true pixel-art feel.
 - **The Wall.** Generate a grid of random critters; click any to load it.
 - **Export.** Download the current critter as a crisp **PNG** or scalable **SVG**.
 
