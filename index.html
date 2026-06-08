@@ -334,7 +334,7 @@ globalThis.Sycritters = (function () {
     { name: "flat",     rows: [[1,1,1,1],[1,1,1,1],[1,1,1,1],[1,1,1,1]] },
     { name: "notch",    rows: [[0,0,1,0],[0,1,1,1],[1,1,1,1],[1,1,1,1]] },
     { name: "ears",     rows: [[0,1,1,0],[0,1,1,0],[1,1,1,1],[1,1,1,1]] },
-    { name: "antennae", rows: [[1,0,0,1],[1,0,1,1],[1,1,1,1],[1,1,1,1]] },
+    { name: "antennae", rows: [[0,1,0,0],[0,1,1,1],[1,1,1,1],[1,1,1,1]] },
   ];
   const BOTTOMS = [
     { name: "flat",    rows: [[1,1,1,1],[1,1,1,1],[1,1,1,1],[1,1,1,1]] },
@@ -366,7 +366,7 @@ globalThis.Sycritters = (function () {
         style: r() < 0.18 ? "visor" : "normal",
         row: 2 + (r() < 0.5 ? 0 : 1), // 2 or 3
         spacing: r() < 0.5 ? "close" : "wide",
-        gaze: { dx: 0, dy: 0 }, // animated at runtime; static default centered
+        gaze: { dx: r() < 0.5 ? 0 : 1, dy: r() < 0.6 ? 0 : 1 }, // seeded resting gaze; animation overrides it
       },
     };
   }

@@ -26,6 +26,16 @@ test("different seeds usually differ", () => {
   assert.ok(specs.size >= 5, "seeds should yield varied specs");
 });
 
+test("generate bakes a seeded resting gaze that varies across seeds", () => {
+  const g = S.generate("abc").eyes.gaze;
+  assert.ok(Number.isInteger(g.dx) && g.dx >= -1 && g.dx <= 1, `dx out of range: ${g.dx}`);
+  assert.ok(Number.isInteger(g.dy) && g.dy >= 0 && g.dy <= 1, `dy out of range: ${g.dy}`);
+  const gazes = new Set(
+    ["a", "b", "c", "d", "e", "f", "g", "h"].map((s) => JSON.stringify(S.generate(s).eyes.gaze))
+  );
+  assert.ok(gazes.size >= 2, "resting gaze should vary across seeds");
+});
+
 test("randomSeed returns a usable string", () => {
   const seed = S.randomSeed(S._test.rng("x"));
   assert.equal(typeof seed, "string");
