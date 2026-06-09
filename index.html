@@ -433,7 +433,8 @@ globalThis.Sycritters = (function () {
         for (let ex = 0; ex < w; ex++) put(baseX + ex, r0 + ey, 2);
       if (!blink) {
         const px = baseX + (w === 1 ? 0 : gaze.dx > 0 ? 1 : 0);
-        const py = r0 + (gaze.dy > 0 ? 1 : 0);
+        // tall eyes sit low by default (only rise when explicitly looking up)
+        const py = r0 + (w === 1 ? (gaze.dy < 0 ? 0 : 1) : (gaze.dy > 0 ? 1 : 0));
         put(px, py, 3);
       }
     }
@@ -625,7 +626,7 @@ globalThis.Sycritters = (function () {
   // Eyes: gaze + blink as a function of the integer frame counter.
   function eyeFrame(frame) {
     const dirs = [
-      { dx: 1, dy: 0 }, { dx: 0, dy: 0 }, { dx: -1, dy: 0 }, { dx: 0, dy: 0 },
+      { dx: 1, dy: 0 }, { dx: 0, dy: 0 }, { dx: -1, dy: 0 }, { dx: 0, dy: -1 },
       { dx: 1, dy: 1 }, { dx: 0, dy: 0 }, { dx: -1, dy: 1 }, { dx: 0, dy: 0 },
     ];
     const gaze = dirs[Math.floor(frame / 11) % dirs.length];

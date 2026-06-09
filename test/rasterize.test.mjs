@@ -63,6 +63,16 @@ test("eye alignment shifts eyes left vs right", () => {
   assert.ok(L[0] < R[0], `left-aligned eyes start further left (${L} vs ${R})`);
 });
 
+test("tall eyes rest with the pupil in the lower cell", () => {
+  const spec = {
+    ...S.generate("x"), top: "flat", bottom: "flat", waist: "straight",
+    eyes: { style: "tall", row: 3, gap: 1, align: "center", gaze: { dx: 0, dy: 0 } },
+  };
+  const g = S.rasterize(spec);
+  assert.ok(g[4].includes(3), "pupil on the lower eye row");
+  assert.ok(!g[3].includes(3), "no pupil on the upper eye row");
+});
+
 test("visor2 is a 2px-tall band with white holes", () => {
   const spec = {
     ...S.generate("x"), top: "flat", bottom: "flat", waist: "straight",
