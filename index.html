@@ -288,6 +288,13 @@ globalThis.Sycritters = (function () {
     { name: "pink",       hex: "#d6336c" },
   ];
 
+  // --- Shared option lists (used by generate + the spec codec) -------------
+  const DIRS = ["diagonal", "horizontal", "vertical", "radial"];
+  const MOTIONS = ["static", "drift", "pulse", "sheen"];
+  const WAISTS = ["straight", "pinch", "narrow"];
+  const EYE_STYLES = ["normal", "tall", "visor", "visor2"];
+  const ALIGNS = ["left", "center", "right"];
+
   // --- Module vocabulary --------------------------------------------------
   // Each module is a 4x4 left-half block. Columns are left->center
   // [x0,x1,x2,x3]; x3 abuts the mirror line. Tops fill rows 0-3, bottoms 4-7.
@@ -333,8 +340,8 @@ globalThis.Sycritters = (function () {
     const start = Math.floor(r() * PALETTE.length);
     const colors = [];                                  // analogous run -> harmonious
     for (let j = 0; j < n; j++) colors.push(PALETTE[(start + j) % PALETTE.length]);
-    const gradientDir = ["diagonal", "horizontal", "vertical", "radial"][Math.floor(r() * 4)];
-    const gradientMotion = ["static", "drift", "pulse", "sheen"][Math.floor(r() * 4)];
+    const gradientDir = DIRS[Math.floor(r() * 4)];
+    const gradientMotion = MOTIONS[Math.floor(r() * 4)];
     const slant = (nm) => /^[23][tb][lr]$/.test(nm);
     const deep = (nm) => /^3[tb][lr]$/.test(nm);          // deep slants read lopsided -> manual-only
     const top = pick(r, TOPS.filter((m) => !deep(m.name))).name;
@@ -386,6 +393,16 @@ globalThis.Sycritters = (function () {
     }
     if (spec.waist === "narrow") {
       for (const y of [3, 4]) { g[y][1] = 0; g[y][6] = 0; }
+    }
+
+    // frame.legShift ∈ {-1,0,1}: nudge the feet row sideways (walk cycle).
+    if (frame && frame.legShift) {
+      const s = frame.legShift, row = g[7], out = new Array(8).fill(0);
+      for (let x = 0; x < 8; x++) {
+        const nx = x + s;
+        if (nx >= 0 && nx < 8) out[nx] = row[x];
+      }
+      g[7] = out;
     }
 
     stampEyes(g, spec, frame);
@@ -475,28 +492,152 @@ globalThis.Sycritters = (function () {
       const symmetric = !moduleByName(TOPS, spec.top).full && !moduleByName(BOTTOMS, spec.bottom).full;
       if (!symOk && symmetric) failures.push([i, "symmetry"]);
       if (!hasWhite || !hasPupil) failures.push([i, "eyes"]);
+      // every eye cell keeps a 1px solid frame (no empty neighbor)
+      for (let y = 0; y < 8; y++)
+        for (let x = 0; x < 8; x++) {
+          if (g[y][x] !== 2 && g[y][x] !== 3) continue;
+          for (let dy = -1; dy <= 1; dy++)
+            for (let dx = -1; dx <= 1; dx++) {
+              const ny = y + dy, nx = x + dx;
+              if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8 && g[ny][nx] === 0)
+                failures.push([i, "eye-frame", x, y]);
+            }
+        }
       if (JSON.stringify(g) !== JSON.stringify(rasterize(generate("seed-" + i))))
         failures.push([i, "determinism"]);
     }
     return { passed: failures.length === 0, failures };
   }
 
-  return { VERSION, PALETTE, TOPS, BOTTOMS, generate, randomSeed, rasterize, selfTest, _test: { rng } };
-})();
-</script>
-<!-- SYCRITTERS-ENGINE:END -->
-
-<script>
-  /* ---- Renderers (consume engine output) ------------------------------ */
-
-  // Body paint may be a flat hex string OR a per-cell function (x,y)->hex
-  // (used by moving gradients). Eyes are always white/black.
+  // --- Pure render helpers (DOM-free; canvas painting lives in the page) ---
+  // hex "#rrggbb" -> [r,g,b]
+  function hexToRgb(h) {
+    h = h.replace("#", "");
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  }
+  function lerpHex(a, b, t) {
+    const ca = hexToRgb(a), cb = hexToRgb(b);
+    const f = (v) => ("0" + Math.round(v).toString(16)).slice(-2);
+    return "#" + f(ca[0] + (cb[0] - ca[0]) * t) + f(ca[1] + (cb[1] - ca[1]) * t) + f(ca[2] + (cb[2] - ca[2]) * t);
+  }
+  // Linear multi-stop blend: t=0 -> colors[0], t=1 -> colors[last] (a clean ramp).
+  function multiLerp(colors, t) {
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const seg = t * (colors.length - 1);
+    const i = Math.min(colors.length - 2, Math.floor(seg));
+    return lerpHex(colors[i], colors[i + 1], seg - i);
+  }
+  // Gradient body paint over 2-3 colors. `dir` lays out the blend; `motion`
+  // animates it subtly over `frame`:
+  //   static = fixed · drift = slow scroll · pulse = gentle breathing
+  //   · sheen = a soft highlight band sweeps across.
+  function gradientPaint(colors, dir, motion, frame) {
+    const BANDS = 5;
+    const pos = (x, y) =>
+      dir === "horizontal" ? x / 7 :
+      dir === "vertical"   ? y / 7 :
+      dir === "radial"     ? Math.min(1, Math.hypot(x - 3.5, y - 3.5) / 4.95) :
+                             (x + y) / 14;
+    return (x, y) => {
+      let u = pos(x, y);
+      if (motion === "drift") u += Math.sin(frame / 30) * 0.18;      // gentle slide
+      else if (motion === "pulse") u += Math.sin(frame / 22) * 0.12; // gentle breathe
+      const band = Math.round((u < 0 ? 0 : u > 1 ? 1 : u) * BANDS) / BANDS;
+      let col = multiLerp(colors, band);
+      if (motion === "sheen") {
+        const center = ((frame / 2) % 28) / 28; // soft highlight sweep
+        const amt = Math.max(0, 1 - Math.abs(pos(x, y) - center) * 6) * 0.4;
+        if (amt > 0) col = lerpHex(col, "#ffffff", amt);
+      }
+      return col;
+    };
+  }
+  // Body paint may be a flat hex string OR a per-cell function (x,y)->hex.
+  // Eyes are always white/black.
   function cellFill(code, paint, x, y) {
     if (code === 1) return typeof paint === "function" ? paint(x, y) : paint;
     if (code === 2) return "#ffffff";
     if (code === 3) return "#000000";
     return null;
   }
+  // Serialize an 8x8 grid to an SVG string (one <rect> per filled cell).
+  function toSVG(grid, paint, scale) {
+    const s = scale || 1;
+    let rects = "";
+    for (let y = 0; y < 8; y++)
+      for (let x = 0; x < 8; x++) {
+        const fill = cellFill(grid[y][x], paint, x, y);
+        if (!fill) continue;
+        rects += `<rect x="${x * s}" y="${y * s}" width="${s}" height="${s}" fill="${fill}"/>`;
+      }
+    return (
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${8 * s}" height="${8 * s}" ` +
+      `viewBox="0 0 ${8 * s} ${8 * s}" shape-rendering="crispEdges">${rects}</svg>`
+    );
+  }
+
+  // --- Spec <-> string codec (shareable URLs) ------------------------------
+  // "~"-delimited, versioned. The seed is URI-encoded with "~" forced to %7E
+  // so it can never collide with the delimiter.
+  const encSeed = (s) => encodeURIComponent(s).replace(/~/g, "%7E");
+  function specToString(spec) {
+    return [
+      "1",
+      encSeed(spec.seed),
+      spec.colors.map((c) => PALETTE.findIndex((p) => p.name === c.name)).join(""),
+      DIRS.indexOf(spec.gradientDir),
+      MOTIONS.indexOf(spec.gradientMotion),
+      TOPS.findIndex((m) => m.name === spec.top),
+      BOTTOMS.findIndex((m) => m.name === spec.bottom),
+      WAISTS.indexOf(spec.waist),
+      EYE_STYLES.indexOf(spec.eyes.style),
+      spec.eyes.row,
+      spec.eyes.gap,
+      ALIGNS.indexOf(spec.eyes.align || "center"),
+      (spec.eyes.gaze.dx + 1) * 3 + (spec.eyes.gaze.dy + 1),
+    ].join("~");
+  }
+  function specFromString(str) {
+    const p = String(str).split("~");
+    if (p.length !== 13 || p[0] !== "1") return null;
+    const idx = (v, arr) => { const i = +v; return Number.isInteger(i) && i >= 0 && i < arr.length ? i : -1; };
+    const colors = [...p[2]].map((d) => PALETTE[+d]).filter(Boolean);
+    const di = idx(p[3], DIRS), mi = idx(p[4], MOTIONS), ti = idx(p[5], TOPS),
+          bi = idx(p[6], BOTTOMS), wi = idx(p[7], WAISTS), si = idx(p[8], EYE_STYLES),
+          ai = idx(p[11], ALIGNS);
+    const row = +p[9], gap = +p[10], gz = +p[12];
+    if (colors.length < 2 || colors.length !== p[2].length) return null;
+    if ([di, mi, ti, bi, wi, si, ai].includes(-1)) return null;
+    if (![2, 3].includes(row) || ![1, 2].includes(gap) || !(gz >= 0 && gz <= 8)) return null;
+    let seed;
+    try { seed = decodeURIComponent(p[1]); } catch { return null; }
+    return {
+      seed,
+      colors,
+      gradientDir: DIRS[di],
+      gradientMotion: MOTIONS[mi],
+      top: TOPS[ti].name,
+      bottom: BOTTOMS[bi].name,
+      waist: WAISTS[wi],
+      eyes: {
+        style: EYE_STYLES[si], row, gap, align: ALIGNS[ai],
+        gaze: { dx: Math.floor(gz / 3) - 1, dy: (gz % 3) - 1 },
+      },
+    };
+  }
+
+  return {
+    VERSION, PALETTE, TOPS, BOTTOMS, generate, randomSeed, rasterize, selfTest,
+    cellFill, gradientPaint, toSVG, specToString, specFromString,
+    _test: { rng, multiLerp },
+  };
+})();
+</script>
+<!-- SYCRITTERS-ENGINE:END -->
+
+<script>
+  /* ---- Renderers (canvas painting; pure helpers live in the engine) --- */
+  const { cellFill, gradientPaint, toSVG, specToString, specFromString } = Sycritters;
 
   // Paint the 8x8 critter cells into a 2d context (caller handles resize/clear).
   // transform = { dx, dy, squashY } in cell units; pad = cell offset.
@@ -524,62 +665,6 @@ globalThis.Sycritters = (function () {
     ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     paintCells(ctx, grid, paint, scale, transform, pad);
-  }
-
-  // Serialize an 8x8 grid to an SVG string (one <rect> per filled cell).
-  function toSVG(grid, paint, scale) {
-    const s = scale || 1;
-    let rects = "";
-    for (let y = 0; y < 8; y++)
-      for (let x = 0; x < 8; x++) {
-        const fill = cellFill(grid[y][x], paint, x, y);
-        if (!fill) continue;
-        rects += `<rect x="${x * s}" y="${y * s}" width="${s}" height="${s}" fill="${fill}"/>`;
-      }
-    return (
-      `<svg xmlns="http://www.w3.org/2000/svg" width="${8 * s}" height="${8 * s}" ` +
-      `viewBox="0 0 ${8 * s} ${8 * s}" shape-rendering="crispEdges">${rects}</svg>`
-    );
-  }
-
-  // --- moving gradient paint --------------------------------------------
-  function lerpHex(a, b, t) {
-    const ca = hexToRgb(a), cb = hexToRgb(b);
-    const f = (v) => ("0" + Math.round(v).toString(16)).slice(-2);
-    return "#" + f(ca[0] + (cb[0] - ca[0]) * t) + f(ca[1] + (cb[1] - ca[1]) * t) + f(ca[2] + (cb[2] - ca[2]) * t);
-  }
-  // Linear multi-stop blend: t=0 -> colors[0], t=1 -> colors[last] (a clean ramp).
-  function multiLerp(colors, t) {
-    t = t < 0 ? 0 : t > 1 ? 1 : t;
-    const seg = t * (colors.length - 1);
-    const i = Math.min(colors.length - 2, Math.floor(seg));
-    return lerpHex(colors[i], colors[i + 1], seg - i);
-  }
-
-  // Gradient body paint over 2-4 colors. `dir` lays out the blend; `motion`
-  // animates it subtly over `frame`:
-  //   static = fixed · drift = slow scroll · pulse = gentle breathing
-  //   · sheen = a soft highlight band sweeps across.
-  function gradientPaint(colors, dir, motion, frame) {
-    const BANDS = 5;
-    const pos = (x, y) =>
-      dir === "horizontal" ? x / 7 :
-      dir === "vertical"   ? y / 7 :
-      dir === "radial"     ? Math.min(1, Math.hypot(x - 3.5, y - 3.5) / 4.95) :
-                             (x + y) / 14;
-    return (x, y) => {
-      let u = pos(x, y);
-      if (motion === "drift") u += Math.sin(frame / 30) * 0.18;      // gentle slide
-      else if (motion === "pulse") u += Math.sin(frame / 22) * 0.12; // gentle breathe
-      const band = Math.round((u < 0 ? 0 : u > 1 ? 1 : u) * BANDS) / BANDS;
-      let col = multiLerp(colors, band);
-      if (motion === "sheen") {
-        const center = ((frame / 2) % 28) / 28; // soft highlight sweep
-        const amt = Math.max(0, 1 - Math.abs(pos(x, y) - center) * 6) * 0.4;
-        if (amt > 0) col = lerpHex(col, "#ffffff", amt);
-      }
-      return col;
-    };
   }
 
   /* ---- Playground ----------------------------------------------------- */
@@ -619,12 +704,6 @@ globalThis.Sycritters = (function () {
 
   /* ---- animation -------------------------------------------------------- */
   const EDITOR_PAD = 2; // cells of margin around the critter (headroom for jumps)
-
-  // hex "#rrggbb" -> [r,g,b] (used by the gradient lerp).
-  function hexToRgb(h) {
-    h = h.replace("#", "");
-    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
-  }
 
   // All motion is quantized to 12fps integer frames -> pixel-art stepped.
   const FPS = 12;
