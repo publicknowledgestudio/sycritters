@@ -409,16 +409,27 @@ globalThis.Sycritters = (function () {
     const align = spec.eyes.align || "center";
     const style = spec.eyes.style;
 
-    // Only paint over body, so eyes never float in empty space.
-    const put = (x, y, code) => {
-      if (!g[y]) return;
-      if (g[y][x] === 1) g[y][x] = code;
-      else if (g[y][x] === 2 && code === 3) g[y][x] = 3;
+    // Guarantee a 1px solid body frame: any empty cell touching an eye cell
+    // (incl. the cell itself) becomes body, so eyes never touch an edge/empty.
+    const frameBody = (cells) => {
+      for (const [x, y] of cells)
+        for (let dy = -1; dy <= 1; dy++)
+          for (let dx = -1; dx <= 1; dx++) {
+            const ny = y + dy, nx = x + dx;
+            if (ny < 0 || ny > 7) continue;
+            // mirror the fill so the body silhouette stays symmetric even though
+            // gap-1 eyes sit slightly off-center
+            for (const cx of [nx, 7 - nx])
+              if (cx >= 0 && cx < 8 && g[ny][cx] === 0) g[ny][cx] = 1;
+          }
     };
 
     // visor (1px band) / visor2 (2px band): black band(s) + two white holes.
     if (style === "visor" || style === "visor2") {
       const rows = style === "visor2" ? [r0, r0 + 1] : [r0];
+      const band = [];
+      for (const ry of rows) for (let x = 0; x < 8; x++) if (g[ry][x] !== 0) band.push([x, ry]);
+      frameBody(band);
       const ls = eyeStart(2 + gap, align);
       for (const ry of rows) {
         for (let x = 0; x < 8; x++) if (g[ry][x] === 1) g[ry][x] = 3;
@@ -427,19 +438,22 @@ globalThis.Sycritters = (function () {
       return;
     }
 
-    // normal = 2x2 eyes; tall = 1x2 vertical eyes (pupil moves up/down).
+    // normal = 2x2 eyes; tall = 1x2 vertical eyes (pupil sits low by default).
     const w = style === "tall" ? 1 : 2;
     const leftStart = eyeStart(2 * w + gap, align);
-    for (const baseX of [leftStart, leftStart + w + gap]) {
+    const bases = [leftStart, leftStart + w + gap];
+    const cells = [];
+    for (const bx of bases)
       for (let ey = 0; ey < 2; ey++)
-        for (let ex = 0; ex < w; ex++) put(baseX + ex, r0 + ey, 2);
-      if (!blink) {
-        const px = baseX + (w === 1 ? 0 : gaze.dx > 0 ? 1 : 0);
-        // tall eyes sit low by default (only rise when explicitly looking up)
+        for (let ex = 0; ex < w; ex++) cells.push([bx + ex, r0 + ey]);
+    frameBody(cells);                          // solid body around + behind the eyes
+    for (const [x, y] of cells) g[y][x] = 2;   // eye-white
+    if (!blink)
+      for (const bx of bases) {
+        const px = bx + (w === 1 ? 0 : gaze.dx > 0 ? 1 : 0);
         const py = r0 + (w === 1 ? (gaze.dy < 0 ? 0 : 1) : (gaze.dy > 0 ? 1 : 0));
-        put(px, py, 3);
+        g[py][px] = 3;                          // pupil
       }
-    }
   }
 
   // --- Self test: sweep invariants over many generated critters ----------

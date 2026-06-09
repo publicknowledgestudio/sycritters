@@ -92,6 +92,22 @@ test("eyes are always present (white + pupil)", () => {
   }
 });
 
+test("every eye cell keeps a 1px solid body frame (no empty neighbor)", () => {
+  for (const seed of ["a","b","c","d","e","f","g","h","i","j","k","l","m","n"]) {
+    const g = grid(seed);
+    for (let y = 0; y < 8; y++)
+      for (let x = 0; x < 8; x++) {
+        if (g[y][x] !== 2 && g[y][x] !== 3) continue; // eye-white / pupil
+        for (let dy = -1; dy <= 1; dy++)
+          for (let dx = -1; dx <= 1; dx++) {
+            const ny = y + dy, nx = x + dx;
+            if (nx < 0 || nx > 7 || ny < 0 || ny > 7) continue;
+            assert.notEqual(g[ny][nx], 0, `${seed}: empty (${nx},${ny}) touches eye (${x},${y})`);
+          }
+      }
+  }
+});
+
 test("all cells use valid codes", () => {
   const g = grid("xyz");
   for (const row of g) for (const c of row) assert.ok([0,1,2,3].includes(c));
