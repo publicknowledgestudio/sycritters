@@ -347,7 +347,7 @@ globalThis.Sycritters = (function () {
     const style = r() < 0.78 ? "normal" : "tall";
     const row = 2 + (r() < 0.5 ? 0 : 1);               // 2 or 3
     const gap = r() < 0.5 ? 1 : 2;                      // px between the eyes (no 0)
-    const align = ["left", "center", "center", "right"][Math.floor(r() * 4)];
+    const align = (r(), "center"); // random eyes stay centered; left/right is a manual control
     const gaze = { dx: r() < 0.5 ? 0 : 1, dy: r() < 0.6 ? 0 : 1 };
     return { seed: String(seed), colors, gradientDir, gradientMotion, top, bottom, waist,
       eyes: { style, row, gap, align, gaze } };
@@ -392,11 +392,13 @@ globalThis.Sycritters = (function () {
     return g;
   }
 
-  // Left column for an eye group of total width `totalW`, by alignment.
+  // Left column for an eye group of total width `totalW`. Alignment is a gentle
+  // 1px nudge off-center, clamped to stay off the edges (so eyes never jam into
+  // a corner and read as lopsided).
   function eyeStart(totalW, align) {
-    if (align === "left") return 1;
-    if (align === "right") return Math.max(1, 7 - totalW);
-    return Math.max(0, Math.floor((8 - totalW) / 2));
+    const center = Math.floor((8 - totalW) / 2);
+    const s = align === "left" ? center - 1 : align === "right" ? center + 1 : center;
+    return Math.min(7 - totalW, Math.max(1, s));
   }
 
   function stampEyes(g, spec, frame) {
