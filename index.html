@@ -122,6 +122,8 @@
   }
   .seg button:hover { border-color: var(--border-hover); color: var(--text); }
   .seg button[aria-pressed="true"] { background: var(--text); color: var(--surface); border-color: var(--text); }
+  /* options random generation skips (manual / Surprise Me territory) */
+  .seg button.spice::after { content: "·"; color: var(--accent); margin-left: 4px; font-weight: 700; }
 
   .check {
     display: flex; align-items: center; gap: 8px; margin-top: 12px;
@@ -141,11 +143,12 @@
   }
   .wall__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 10px; }
   .tile {
-    width: 100%; aspect-ratio: 1; image-rendering: pixelated;
+    width: 100%; aspect-ratio: 1;
     background: var(--surface); border: 1px solid var(--border); padding: 8%; cursor: pointer;
     transition: border-color .12s;
   }
-  .tile:hover { border-color: var(--accent); }
+  .tile:hover, .tile:focus-visible { border-color: var(--accent); }
+  .tile canvas { display: block; width: 100%; height: auto; image-rendering: pixelated; }
   .wall__empty { color: var(--text-dim); font-size: 12px; padding: 16px 2px; }
 
   .foot { margin-top: 44px; color: var(--text-dim); font-size: 11px; letter-spacing: .5px; text-transform: uppercase; }
@@ -162,7 +165,7 @@
 
   <section class="stage">
     <div class="specimen">
-      <div class="specimen__card"><canvas id="editor" width="256" height="256"></canvas></div>
+      <div class="specimen__card"><canvas id="editor" width="256" height="256" role="img" aria-label="current critter preview"></canvas></div>
       <div class="specimen__plate"><span class="k">SEED</span><span class="v" id="seedReadout">&mdash;</span></div>
     </div>
 
@@ -223,6 +226,8 @@
         <div class="exportrow">
           <button id="png" class="btn">PNG</button>
           <button id="svg" class="btn">SVG</button>
+          <button id="sheet" class="btn" title="12-frame sprite sheet">Sheet</button>
+          <button id="link" class="btn" title="copy a shareable link">Link</button>
         </div>
       </div>
     </aside>
@@ -678,12 +683,22 @@ globalThis.Sycritters = (function () {
     tops: $("tops"), bottoms: $("bottoms"), waist: $("waist"),
     eyeStyle: $("eyeStyle"), eyeGap: $("eyeGap"), eyeAlign: $("eyeAlign"), bodyAnim: $("bodyAnim"),
     animEyes: $("animEyes"),
-    png: $("png"), svg: $("svg"), genWall: $("genWall"), grid: $("grid"),
+    png: $("png"), svg: $("svg"), sheet: $("sheet"), link: $("link"),
+    genWall: $("genWall"), grid: $("grid"),
   };
 
-  let current = S.generate("sycritter");
+  // Boot from a share URL (?c=<spec>) when present. We read the raw query
+  // ourselves: URLSearchParams would percent-decode the seed early and a seed
+  // containing "~" would then collide with the codec delimiter.
+  function specFromURL() {
+    const m = location.search.match(/[?&]c=([^&]+)/);
+    return (m && specFromString(m[1])) || null;
+  }
+
+  let current = specFromURL() || S.generate("sycritter");
   let bodyAnimMode = "none";
   let lastFrame = -1;
+  let wallTiles = [];
 
   function newSeed() {
     return Math.floor(Math.random() * 0x100000000).toString(36);
@@ -697,7 +712,11 @@ globalThis.Sycritters = (function () {
   // owns drawing the editor critter every frame from `current`.
   function render() {
     els.seed.value = current.seed;
-    els.seedReadout.textContent = current.seed;
+    // honest seed plate: flag when overrides mean the seed alone won't
+    // reproduce this critter (the URL still will)
+    const pristine = JSON.stringify(current) === JSON.stringify(S.generate(current.seed));
+    els.seedReadout.textContent = current.seed + (pristine ? "" : " · edited");
+    try { history.replaceState(null, "", "?c=" + specToString(current)); } catch {}
     syncControls();
     lastFrame = -1; // force the loop to redraw the editor on the next frame
   }
@@ -749,16 +768,51 @@ globalThis.Sycritters = (function () {
     return { dx: 0, dy: 0, squashY: 1 };
   }
 
-  function draw(frame) {
+  // Feet counter the walk sway so the legs read as stepping, not sliding.
+  const WALK_LEGS = [0, -1, -1, 0, 1, 1];
+
+  const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+  if (reducedMotion.addEventListener) reducedMotion.addEventListener("change", () => { lastFrame = -1; });
+
+  function editorAnimated() {
+    return !reducedMotion.matches &&
+      (els.animEyes.checked || bodyAnimMode !== "none" || (current.gradientMotion || "static") !== "static");
+  }
+
+  // Everything the editor (and the sprite sheet) needs for one frame.
+  function composeFrame(frame) {
     const f = { gaze: current.eyes.gaze || { dx: 0, dy: 0 }, blink: false };
-    if (els.animEyes.checked) { const e = eyeFrame(frame); f.gaze = e.gaze; f.blink = e.blink; }
-    drawCanvas(els.editor, S.rasterize(current, f), paintFor(current, frame),
-      EDITOR_SCALE, bodyTransform(frame), EDITOR_PAD);
+    let paint = restPaint(current), transform = null;
+    if (!reducedMotion.matches) {
+      if (els.animEyes.checked) { const e = eyeFrame(frame); f.gaze = e.gaze; f.blink = e.blink; }
+      if (bodyAnimMode === "walk") f.legShift = WALK_LEGS[frame % WALK_LEGS.length];
+      paint = paintFor(current, frame);
+      transform = bodyTransform(frame);
+    }
+    return { grid: S.rasterize(current, f), paint, transform };
+  }
+
+  function draw(frame) {
+    const c = composeFrame(frame);
+    drawCanvas(els.editor, c.grid, c.paint, EDITOR_SCALE, c.transform, EDITOR_PAD);
+  }
+
+  // Animate only the wall tiles whose gradient actually moves (eyes rest).
+  function drawWall(frame) {
+    for (const t of wallTiles) {
+      if ((t.spec.gradientMotion || "static") === "static") continue;
+      drawCanvas(t.canvas, t.grid, paintFor(t.spec, frame), 16);
+    }
   }
 
   function loop(t) {
     const frame = Math.floor(t / (1000 / FPS));
-    if (frame !== lastFrame) { lastFrame = frame; draw(frame); }
+    if (frame !== lastFrame) {
+      // skip redraws when nothing animates (lastFrame -1 forces one draw)
+      if (lastFrame === -1 || editorAnimated()) draw(frame);
+      if (!reducedMotion.matches) drawWall(frame);
+      lastFrame = frame;
+    }
     requestAnimationFrame(loop);
   }
 
@@ -818,6 +872,19 @@ globalThis.Sycritters = (function () {
     buildSeg(els.eyeGap, ["1", "2"], (v) => override({ eyes: { ...current.eyes, gap: Number(v) } }), false);
     buildSeg(els.eyeAlign, ["left", "center", "right"], (v) => override({ eyes: { ...current.eyes, align: v } }), false);
     buildSeg(els.bodyAnim, ["none", "bob", "jump", "walk"], (v) => { bodyAnimMode = v; }, false);
+    // mark the options random generation deliberately skips
+    markSpice(els.tops, ["3tl", "3tr"]);
+    markSpice(els.bottoms, ["3bl", "3br"]);
+    markSpice(els.eyeStyle, ["visor", "visor2"]);
+    markSpice(els.eyeAlign, ["left", "right"]);
+  }
+
+  function markSpice(container, values) {
+    for (const b of container.children)
+      if (values.includes(b.dataset.value)) {
+        b.classList.add("spice");
+        b.title = "manual pick — random skips this (Surprise Me sometimes dares)";
+      }
   }
 
   function setPressed(container, isOn) {
@@ -840,40 +907,105 @@ globalThis.Sycritters = (function () {
   /* gallery wall */
   function generateWall(n) {
     els.grid.innerHTML = "";
+    wallTiles = [];
     for (let i = 0; i < (n || 28); i++) {
       const seed = newSeed();
       const spec = S.generate(seed);
+      const grid = S.rasterize(spec);
+      const btn = document.createElement("button");
+      btn.className = "tile"; btn.dataset.seed = seed; btn.title = seed;
+      btn.setAttribute("aria-label", "load critter " + seed);
       const c = document.createElement("canvas");
-      c.className = "tile"; c.dataset.seed = seed; c.title = seed;
-      drawCanvas(c, S.rasterize(spec), restPaint(spec), 16);
-      c.addEventListener("click", () => { setSeedAndRegen(seed); render(); window.scrollTo({ top: 0, behavior: "smooth" }); });
-      els.grid.appendChild(c);
+      drawCanvas(c, grid, restPaint(spec), 16);
+      btn.appendChild(c);
+      btn.addEventListener("click", () => { setSeedAndRegen(seed); render(); window.scrollTo({ top: 0, behavior: "smooth" }); });
+      els.grid.appendChild(btn);
+      wallTiles.push({ canvas: c, spec, grid });
     }
   }
 
   /* export */
+  // Export what you see: the gradient at its current animation frame
+  // (resting eyes/body so a blink or mid-jump can't spoil the file).
+  function livePaint() {
+    if (reducedMotion.matches) return restPaint(current);
+    return paintFor(current, Math.max(0, lastFrame));
+  }
   function downloadPNG(scale) {
     const c = document.createElement("canvas");
-    drawCanvas(c, S.rasterize(current), restPaint(current), scale || 32);
+    drawCanvas(c, S.rasterize(current), livePaint(), scale || 32);
     const a = document.createElement("a");
     a.download = `sycritter-${current.seed}.png`;
     a.href = c.toDataURL("image/png"); a.click();
   }
   function downloadSVG(scale) {
-    const svg = toSVG(S.rasterize(current), restPaint(current), scale || 32);
+    const svg = toSVG(S.rasterize(current), livePaint(), scale || 32);
     const a = document.createElement("a");
     a.download = `sycritter-${current.seed}.svg`;
     a.href = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
     a.click();
   }
+  // 12-frame horizontal sprite strip: body motion + gradient cycle, resting
+  // eyes (the eye cycle is 88 frames long and wouldn't loop in 12).
+  function buildSheetCanvas(scale, frames) {
+    const pad = 2, cell = (8 + 2 * pad) * scale;
+    const sheet = document.createElement("canvas");
+    sheet.width = cell * frames; sheet.height = cell;
+    const ctx = sheet.getContext("2d");
+    ctx.imageSmoothingEnabled = false;
+    const tmp = document.createElement("canvas");
+    for (let f = 0; f < frames; f++) {
+      const fr = { gaze: current.eyes.gaze || { dx: 0, dy: 0 }, blink: false };
+      if (bodyAnimMode === "walk") fr.legShift = WALK_LEGS[f % WALK_LEGS.length];
+      drawCanvas(tmp, S.rasterize(current, fr), paintFor(current, f), scale, bodyTransform(f), pad);
+      ctx.drawImage(tmp, f * cell, 0);
+    }
+    return sheet;
+  }
+  function downloadSheet(scale) {
+    const a = document.createElement("a");
+    a.download = `sycritter-${current.seed}-sheet.png`;
+    a.href = buildSheetCanvas(scale || 16, 12).toDataURL("image/png");
+    a.click();
+  }
+  function copyLink() {
+    navigator.clipboard.writeText(location.href).then(() => {
+      els.link.textContent = "Copied";
+      setTimeout(() => { els.link.textContent = "Link"; }, 900);
+    });
+  }
 
   /* wiring */
   els.seed.addEventListener("change", (e) => { setSeedAndRegen(e.target.value.trim() || newSeed()); render(); });
   els.rand.addEventListener("click", () => { setSeedAndRegen(newSeed()); render(); });
-  els.surprise.addEventListener("click", () => { setSeedAndRegen(newSeed()); render(); });
+  // Surprise me has personality: unlike 🎲 it sometimes dips into the
+  // manual-only spice (visors, deep slants, off-center eyes).
+  els.surprise.addEventListener("click", () => {
+    const spec = S.generate(newSeed());
+    const mut = { ...spec, eyes: { ...spec.eyes } };
+    const isSlant = (nm) => /^[23][tb][lr]$/.test(nm);
+    const roll = Math.random();
+    if (roll < 0.2) {
+      mut.eyes.style = Math.random() < 0.5 ? "visor" : "visor2";
+    } else if (roll < 0.4) {
+      if (Math.random() < 0.5) {
+        mut.top = Math.random() < 0.5 ? "3tl" : "3tr";
+        if (isSlant(mut.bottom)) mut.bottom = "flat";
+      } else {
+        mut.bottom = Math.random() < 0.5 ? "3bl" : "3br";
+        if (isSlant(mut.top)) mut.top = "flat";
+      }
+    } else if (roll < 0.55) {
+      mut.eyes.align = Math.random() < 0.5 ? "left" : "right";
+    }
+    current = mut;
+    render();
+  });
   els.animEyes.addEventListener("change", render);
   els.png.addEventListener("click", () => downloadPNG());
   els.svg.addEventListener("click", () => downloadSVG());
+  els.sheet.addEventListener("click", () => downloadSheet());
+  els.link.addEventListener("click", copyLink);
   els.genWall.addEventListener("click", () => generateWall());
 
   buildSwatches();
@@ -882,7 +1014,7 @@ globalThis.Sycritters = (function () {
   requestAnimationFrame(loop);
 
   // Run engine invariant checks from the browser via index.html?test
-  if (location.search.includes("test")) {
+  if (new URLSearchParams(location.search).has("test")) {
     const r = Sycritters.selfTest();
     console.log(
       r.passed ? "Sycritters selfTest: PASS" : "Sycritters selfTest: FAIL",

@@ -23,8 +23,18 @@ Just open `index.html` in a browser. No build, no server, no dependencies.
 - **Animate it.** Gradients have subtle motion modes — `static / drift / pulse /
   sheen`. Eyes blink + look around, and the body can bob / jump / walk. All
   motion runs at **12fps in whole-pixel steps** for a true pixel-art feel.
-- **The Wall.** Generate a grid of random critters; click any to load it.
-- **Export.** Download the current critter as a crisp **PNG** or scalable **SVG**.
+- **Share it.** The URL always encodes the exact critter on screen — including
+  manual edits — so copying the address (or the **Link** button) is a permalink.
+  The seed plate shows `· edited` when overrides mean the seed alone wouldn't
+  reproduce it.
+- **The Wall.** Generate a grid of random critters (their gradients animate);
+  click any to load it.
+- **Export.** Download the critter as a crisp **PNG** or scalable **SVG**
+  (captured at the gradient's current frame), or a 12-frame **sprite sheet**
+  of its motion cycle.
+- **Surprise me** is spicier than 🎲: it sometimes picks the options random
+  generation skips (visors, deep slants, off-center eyes — marked with an
+  orange dot in the controls). Motion respects `prefers-reduced-motion`.
 
 ## How it works
 
