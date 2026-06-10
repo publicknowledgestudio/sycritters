@@ -209,6 +209,10 @@
         <label class="ctl__label">&#9646; Eyes</label>
         <span class="sublabel">style</span>
         <div id="eyeStyle" class="seg"></div>
+        <span class="sublabel">pupil</span>
+        <div id="eyePupil" class="seg" title="dot = 1px, bar = 1x2 column (2x2 eyes)"></div>
+        <span class="sublabel">gaze</span>
+        <div id="eyeMirror" class="seg" title="mirrored = pupils point inward/outward together"></div>
         <span class="sublabel">gap</span>
         <div id="eyeGap" class="seg" title="px between the eyes"></div>
         <span class="sublabel">align</span>
@@ -717,7 +721,8 @@ globalThis.Sycritters = (function () {
     rand: $("rand"), surprise: $("surprise"),
     palette: $("palette"), colorCount: $("colorCount"), gradDir: $("gradDir"), gradMotion: $("gradMotion"),
     tops: $("tops"), bottoms: $("bottoms"), waist: $("waist"),
-    eyeStyle: $("eyeStyle"), eyeGap: $("eyeGap"), eyeAlign: $("eyeAlign"), bodyAnim: $("bodyAnim"),
+    eyeStyle: $("eyeStyle"), eyePupil: $("eyePupil"), eyeMirror: $("eyeMirror"),
+    eyeGap: $("eyeGap"), eyeAlign: $("eyeAlign"), bodyAnim: $("bodyAnim"),
     animEyes: $("animEyes"),
     png: $("png"), svg: $("svg"), sheet: $("sheet"), link: $("link"),
     genWall: $("genWall"), grid: $("grid"),
@@ -903,8 +908,10 @@ globalThis.Sycritters = (function () {
     buildSeg(els.gradMotion, ["static", "drift", "pulse", "sheen"], (v) => override({ gradientMotion: v }), false);
     buildSeg(els.tops, S.TOPS.map((m) => m.name), (v) => override({ top: v }), true);
     buildSeg(els.bottoms, S.BOTTOMS.map((m) => m.name), (v) => override({ bottom: v }), true);
-    buildSeg(els.waist, ["straight", "pinch", "narrow"], (v) => override({ waist: v }), false);
-    buildSeg(els.eyeStyle, ["normal", "tall", "visor", "visor2"], (v) => override({ eyes: { ...current.eyes, style: v } }), false);
+    buildSeg(els.waist, ["straight", "pinch", "narrow", "bite-l", "bite-r"], (v) => override({ waist: v }), false);
+    buildSeg(els.eyeStyle, ["normal", "short", "tall", "visor", "visor2"], (v) => override({ eyes: { ...current.eyes, style: v } }), false);
+    buildSeg(els.eyePupil, ["dot", "bar"], (v) => override({ eyes: { ...current.eyes, pupil: v } }), false);
+    buildSeg(els.eyeMirror, ["parallel", "mirrored"], (v) => override({ eyes: { ...current.eyes, mirror: v === "mirrored" } }), false);
     buildSeg(els.eyeGap, ["1", "2"], (v) => override({ eyes: { ...current.eyes, gap: Number(v) } }), false);
     buildSeg(els.eyeAlign, ["left", "center", "right"], (v) => override({ eyes: { ...current.eyes, align: v } }), false);
     buildSeg(els.bodyAnim, ["none", "bob", "jump", "walk"], (v) => { bodyAnimMode = v; }, false);
@@ -935,6 +942,8 @@ globalThis.Sycritters = (function () {
     setPressed(els.bottoms, (b) => b.dataset.value === current.bottom);
     setPressed(els.waist, (b) => b.dataset.value === current.waist);
     setPressed(els.eyeStyle, (b) => b.dataset.value === current.eyes.style);
+    setPressed(els.eyePupil, (b) => b.dataset.value === (current.eyes.pupil || "dot"));
+    setPressed(els.eyeMirror, (b) => b.dataset.value === (current.eyes.mirror ? "mirrored" : "parallel"));
     setPressed(els.eyeGap, (b) => b.dataset.value === String(current.eyes.gap));
     setPressed(els.eyeAlign, (b) => b.dataset.value === (current.eyes.align || "center"));
     setPressed(els.bodyAnim, (b) => b.dataset.value === bodyAnimMode);
