@@ -14,12 +14,14 @@ Just open `index.html` in a browser. No build, no server, no dependencies.
 - **Configure it.** Every critter is a **gradient** of 2–3 *analogous* palette
   colors (a consecutive run around the hue wheel, so it's always harmonious) with
   a direction (diagonal / horizontal / vertical / radial). Pick a top half (dome /
-  notch / ears / antennae / flat + diagonal slants **2tl/3tl/2tr/3tr**, shallow
-  or deep), a bottom half (flat / round / legs / splayed / spikes / tripod +
-  slants **2bl/3bl/2br/3br**), the
-  **middle** two rows (straight / pinch / narrow), and eyes — style (normal /
-  tall / visor / visor2), a 1 or 2 px gap, and left / center / right alignment.
-  Touching one control changes only that axis (lock-an-axis).
+  notch / ears / antennae / flat / loaf / crown / w / trident / dots + diagonal
+  slants **2tl/3tl/2tr/3tr**), a bottom half (flat / round / legs / splayed /
+  spikes / tripod / tripod2 / toes / dots + slants **2bl/3bl/2br/3br**), the
+  **middle** two rows (straight / pinch / narrow, or a one-sided **bite**), and
+  eyes — style (normal / **short** / tall / visor / visor2), pupil (dot or a 1×2
+  **bar**), gaze (parallel or **mirrored**, pupils pointing inward/outward
+  together), a 1 or 2 px gap, and alignment. Touching one control changes only
+  that axis (lock-an-axis).
 - **Animate it.** Gradients have subtle motion modes — `static / drift / pulse /
   sheen`. Eyes blink + look around, and the body can bob / jump / walk. All
   motion runs at **12fps in whole-pixel steps** for a true pixel-art feel.
