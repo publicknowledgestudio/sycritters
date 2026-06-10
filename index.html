@@ -296,9 +296,10 @@ globalThis.Sycritters = (function () {
   // --- Shared option lists (used by generate + the spec codec) -------------
   const DIRS = ["diagonal", "horizontal", "vertical", "radial"];
   const MOTIONS = ["static", "drift", "pulse", "sheen"];
-  const WAISTS = ["straight", "pinch", "narrow"];
-  const EYE_STYLES = ["normal", "tall", "visor", "visor2"];
+  const WAISTS = ["straight", "pinch", "narrow", "bite-l", "bite-r"];
+  const EYE_STYLES = ["normal", "tall", "visor", "visor2", "short"]; // appended: codec indices stay stable
   const ALIGNS = ["left", "center", "right"];
+  const PUPILS = ["dot", "bar"];
 
   // --- Module vocabulary --------------------------------------------------
   // Each module is a 4x4 left-half block. Columns are left->center
@@ -309,6 +310,11 @@ globalThis.Sycritters = (function () {
     { name: "notch",    rows: [[0,0,1,0],[0,1,1,1],[1,1,1,1],[1,1,1,1]] },
     { name: "ears",     rows: [[0,1,1,0],[0,1,1,0],[1,1,1,1],[1,1,1,1]] },
     { name: "antennae", rows: [[0,1,0,0],[0,1,1,1],[1,1,1,1],[1,1,1,1]] },
+    { name: "loaf",     rows: [[0,1,1,1],[1,1,1,1],[1,1,1,1],[1,1,1,1]] }, // corners-cut flat
+    { name: "crown",    rows: [[1,0,1,1],[1,1,1,1],[1,1,1,1],[1,1,1,1]] }, // flat with 1px slits
+    { name: "w",        rows: [[0,1,1,0],[0,1,1,1],[1,1,1,1],[1,1,1,1]] }, // horns, center fills a row lower
+    { name: "trident",  rows: [[0,1,0,1],[1,1,1,1],[1,1,1,1],[1,1,1,1]] }, // three nubs
+    { name: "dots",     rows: [[1,0,1,1],[0,1,1,1],[1,1,1,1],[1,1,1,1]] }, // detached corner pixels
     // asymmetric diagonal slants (full 8-wide, not mirrored); 2 = shallow, 3 = deep:
     { name: "2tl", full: true, rows: [[0,0,1,1,1,1,1,1],[0,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1]] },
     { name: "2tr", full: true, rows: [[1,1,1,1,1,1,0,0],[1,1,1,1,1,1,1,0],[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1]] },
@@ -322,6 +328,9 @@ globalThis.Sycritters = (function () {
     { name: "splayed", rows: [[1,1,1,1],[1,1,1,1],[1,1,1,1],[1,1,0,0]] },
     { name: "spikes",  rows: [[1,1,1,1],[1,1,1,1],[1,0,1,1],[1,0,0,1]] },
     { name: "tripod",  rows: [[1,1,1,1],[1,1,1,1],[1,1,1,1],[1,1,0,1]] }, // 2-1-2-1-2 legs
+    { name: "tripod2", rows: [[1,1,1,1],[1,1,1,1],[1,1,0,1],[1,1,0,1]] }, // tripod on 2-row stilts
+    { name: "toes",    rows: [[1,1,1,1],[1,1,1,1],[1,1,1,1],[0,1,0,1]] }, // three inset feet (1-2-1)
+    { name: "dots",    rows: [[1,1,1,1],[1,1,1,1],[0,1,1,1],[1,0,1,1]] }, // detached corner pixels
     // asymmetric diagonal slants (full 8-wide, not mirrored); 2 = shallow, 3 = deep:
     { name: "2bl", full: true, rows: [[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[0,1,1,1,1,1,1,1],[0,0,1,1,1,1,1,1]] },
     { name: "2br", full: true, rows: [[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,0],[1,1,1,1,1,1,0,0]] },
@@ -355,14 +364,20 @@ globalThis.Sycritters = (function () {
     const bottom = pick(r, bpool).name;
     let waist = ["straight", "straight", "straight", "pinch", "pinch", "narrow"][Math.floor(r() * 6)];
     if ((slant(top) || slant(bottom)) && waist === "narrow") waist = "straight"; // slant already trims
-    // random keeps eyes clear (normal/tall); visors read as bars -> manual-only
-    const style = r() < 0.78 ? "normal" : "tall";
+    // mild one-sided bite (kept off slanted bodies so asymmetry never compounds)
+    const biteRoll = r(), biteSide = r() < 0.5 ? "bite-l" : "bite-r";
+    if (waist === "straight" && !slant(top) && !slant(bottom) && biteRoll < 0.15) waist = biteSide;
+    // random keeps eyes clear (normal/short/tall); visors read as bars -> manual-only
+    const k = r();
+    const style = k < 0.5 ? "normal" : k < 0.78 ? "short" : "tall";
     const row = 2 + (r() < 0.5 ? 0 : 1);               // 2 or 3
     const gap = r() < 0.5 ? 1 : 2;                      // px between the eyes (no 0)
     const align = (r(), "center"); // random eyes stay centered; left/right is a manual control
     const gaze = { dx: r() < 0.5 ? 0 : 1, dy: r() < 0.6 ? 0 : 1 };
+    const pupil = style === "normal" && r() < 0.25 ? "bar" : "dot"; // 1x2 bar pupils, 2x2 eyes only
+    const mirror = r() < 0.35; // pupils mirror (inward/outward) instead of parallel
     return { seed: String(seed), colors, gradientDir, gradientMotion, top, bottom, waist,
-      eyes: { style, row, gap, align, gaze } };
+      eyes: { style, row, gap, align, gaze, pupil, mirror } };
   }
 
   // --- Rasterize: spec -> 8x8 grid of codes (0 empty,1 body,2 white,3 pupil)
@@ -399,6 +414,9 @@ globalThis.Sycritters = (function () {
     if (spec.waist === "narrow") {
       for (const y of [3, 4]) { g[y][1] = 0; g[y][6] = 0; }
     }
+    // one-sided bites (asymmetric on purpose)
+    if (spec.waist === "bite-l") for (const y of [3, 4]) g[y][0] = 0;
+    if (spec.waist === "bite-r") for (const y of [3, 4]) g[y][7] = 0;
 
     // frame.legShift ∈ {-1,0,1}: nudge the feet row sideways (walk cycle).
     if (frame && frame.legShift) {
@@ -433,15 +451,18 @@ globalThis.Sycritters = (function () {
 
     // Guarantee a 1px solid body frame: any empty cell touching an eye cell
     // (incl. the cell itself) becomes body, so eyes never touch an edge/empty.
+    // On symmetric bodies the fill is mirrored so gap-1 (off-center) eyes can't
+    // skew the silhouette; asymmetric bodies (slants, bites) fill plainly so
+    // the deliberate asymmetry isn't repaired.
+    const symBody = spec.waist.indexOf("bite") !== 0 &&
+      !moduleByName(TOPS, spec.top).full && !moduleByName(BOTTOMS, spec.bottom).full;
     const frameBody = (cells) => {
       for (const [x, y] of cells)
         for (let dy = -1; dy <= 1; dy++)
           for (let dx = -1; dx <= 1; dx++) {
             const ny = y + dy, nx = x + dx;
             if (ny < 0 || ny > 7) continue;
-            // mirror the fill so the body silhouette stays symmetric even though
-            // gap-1 eyes sit slightly off-center
-            for (const cx of [nx, 7 - nx])
+            for (const cx of symBody ? [nx, 7 - nx] : [nx])
               if (cx >= 0 && cx < 8 && g[ny][cx] === 0) g[ny][cx] = 1;
           }
     };
@@ -460,22 +481,29 @@ globalThis.Sycritters = (function () {
       return;
     }
 
-    // normal = 2x2 eyes; tall = 1x2 vertical eyes (pupil sits low by default).
+    // normal = 2x2 · short = 2x1 (pupil slides sideways) · tall = 1x2 (rests low)
     const w = style === "tall" ? 1 : 2;
+    const h = style === "short" ? 1 : 2;
+    const mirror = !!spec.eyes.mirror;                         // right eye flips its pupil
+    const bar = spec.eyes.pupil === "bar" && style === "normal"; // 1x2 column pupil
     const leftStart = eyeStart(2 * w + gap, align);
     const bases = [leftStart, leftStart + w + gap];
     const cells = [];
     for (const bx of bases)
-      for (let ey = 0; ey < 2; ey++)
+      for (let ey = 0; ey < h; ey++)
         for (let ex = 0; ex < w; ex++) cells.push([bx + ex, r0 + ey]);
     frameBody(cells);                          // solid body around + behind the eyes
     for (const [x, y] of cells) g[y][x] = 2;   // eye-white
     if (!blink)
-      for (const bx of bases) {
-        const px = bx + (w === 1 ? 0 : gaze.dx > 0 ? 1 : 0);
-        const py = r0 + (w === 1 ? (gaze.dy < 0 ? 0 : 1) : (gaze.dy > 0 ? 1 : 0));
-        g[py][px] = 3;                          // pupil
-      }
+      bases.forEach((bx, i) => {
+        let pdx = w === 1 ? 0 : gaze.dx > 0 ? 1 : 0;
+        if (mirror && i === 1 && w === 2) pdx = 1 - pdx;
+        const py = h === 1 ? r0
+          : w === 1 ? r0 + (gaze.dy < 0 ? 0 : 1)   // tall eyes rest low
+          : r0 + (gaze.dy > 0 ? 1 : 0);
+        if (bar) { g[r0][bx + pdx] = 3; g[r0 + 1][bx + pdx] = 3; }
+        else g[py][bx + pdx] = 3;                  // pupil
+      });
   }
 
   // --- Self test: sweep invariants over many generated critters ----------
@@ -494,7 +522,8 @@ globalThis.Sycritters = (function () {
           if (c === 2) hasWhite = true;
           if (c === 3) hasPupil = true;
         }
-      const symmetric = !moduleByName(TOPS, spec.top).full && !moduleByName(BOTTOMS, spec.bottom).full;
+      const symmetric = !moduleByName(TOPS, spec.top).full && !moduleByName(BOTTOMS, spec.bottom).full &&
+        spec.waist.indexOf("bite") !== 0;
       if (!symOk && symmetric) failures.push([i, "symmetry"]);
       if (!hasWhite || !hasPupil) failures.push([i, "eyes"]);
       // every eye cell keeps a 1px solid frame (no empty neighbor)
@@ -587,7 +616,7 @@ globalThis.Sycritters = (function () {
   const encSeed = (s) => encodeURIComponent(s).replace(/~/g, "%7E");
   function specToString(spec) {
     return [
-      "1",
+      "2",
       encSeed(spec.seed),
       spec.colors.map((c) => PALETTE.findIndex((p) => p.name === c.name)).join(""),
       DIRS.indexOf(spec.gradientDir),
@@ -600,11 +629,15 @@ globalThis.Sycritters = (function () {
       spec.eyes.gap,
       ALIGNS.indexOf(spec.eyes.align || "center"),
       (spec.eyes.gaze.dx + 1) * 3 + (spec.eyes.gaze.dy + 1),
+      PUPILS.indexOf(spec.eyes.pupil || "dot"),
+      spec.eyes.mirror ? 1 : 0,
     ].join("~");
   }
   function specFromString(str) {
     const p = String(str).split("~");
-    if (p.length !== 13 || p[0] !== "1") return null;
+    // v2 adds pupil + mirror; v1 links keep working with safe defaults
+    const v2 = p[0] === "2" && p.length === 15;
+    if (!v2 && !(p[0] === "1" && p.length === 13)) return null;
     const idx = (v, arr) => { const i = +v; return Number.isInteger(i) && i >= 0 && i < arr.length ? i : -1; };
     const colors = [...p[2]].map((d) => PALETTE[+d]).filter(Boolean);
     const di = idx(p[3], DIRS), mi = idx(p[4], MOTIONS), ti = idx(p[5], TOPS),
@@ -614,6 +647,8 @@ globalThis.Sycritters = (function () {
     if (colors.length < 2 || colors.length !== p[2].length) return null;
     if ([di, mi, ti, bi, wi, si, ai].includes(-1)) return null;
     if (![2, 3].includes(row) || ![1, 2].includes(gap) || !(gz >= 0 && gz <= 8)) return null;
+    const pi = v2 ? idx(p[13], PUPILS) : 0;
+    if (pi === -1 || (v2 && !["0", "1"].includes(p[14]))) return null;
     let seed;
     try { seed = decodeURIComponent(p[1]); } catch { return null; }
     return {
@@ -627,6 +662,7 @@ globalThis.Sycritters = (function () {
       eyes: {
         style: EYE_STYLES[si], row, gap, align: ALIGNS[ai],
         gaze: { dx: Math.floor(gz / 3) - 1, dy: (gz % 3) - 1 },
+        pupil: PUPILS[pi], mirror: v2 && p[14] === "1",
       },
     };
   }

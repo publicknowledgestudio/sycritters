@@ -15,7 +15,7 @@ test("silhouette is left-right symmetric for symmetric modules", () => {
   // The outline is symmetric when top & bottom are symmetric modules (eyes may
   // recolor body cells off-center); asymmetric slants (tl/tr/bl/br) break it.
   for (const seed of ["abc", "gap1-seed", "tall-seed", "xyz"]) {
-    const g = S.rasterize({ ...S.generate(seed), top: "dome", bottom: "round" });
+    const g = S.rasterize({ ...S.generate(seed), top: "dome", bottom: "round", waist: "straight" });
     for (let y = 0; y < 8; y++)
       for (let x = 0; x < 4; x++) {
         const l = g[y][x] !== 0, r = g[y][7 - x] !== 0;

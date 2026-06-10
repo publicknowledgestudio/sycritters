@@ -13,8 +13,10 @@ test("generate produces a spec with valid axes", () => {
   assert.equal(spec.seed, "abc");
   assert.ok(S.TOPS.some(m => m.name === spec.top));
   assert.ok(S.BOTTOMS.some(m => m.name === spec.bottom));
-  assert.ok(["straight", "pinch", "narrow"].includes(spec.waist));
-  assert.ok(["normal", "tall", "visor", "visor2"].includes(spec.eyes.style));
+  assert.ok(["straight", "pinch", "narrow", "bite-l", "bite-r"].includes(spec.waist));
+  assert.ok(["normal", "tall", "visor", "visor2", "short"].includes(spec.eyes.style));
+  assert.ok(["dot", "bar"].includes(spec.eyes.pupil));
+  assert.equal(typeof spec.eyes.mirror, "boolean");
   assert.ok([1, 2].includes(spec.eyes.gap));
   assert.ok(["left", "center", "right"].includes(spec.eyes.align));
   assert.ok(spec.eyes.row >= 2 && spec.eyes.row <= 3);
