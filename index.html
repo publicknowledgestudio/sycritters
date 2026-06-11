@@ -188,9 +188,10 @@
     border: 1px solid transparent; padding: 2px 5px; cursor: pointer;
   }
   .cast__remove:hover { color: var(--accent); border-color: var(--border); }
-  .cast__row { display: flex; gap: 4px; }
+  .cast__row { display: flex; flex-wrap: wrap; gap: 4px; }
+  .cast__row .cast__dl { flex: 1; }
   .cast__cycle {
-    flex: 1; min-width: 0; font-family: var(--mono); font-size: 11px;
+    flex-basis: 100%; min-width: 0; font-family: var(--mono); font-size: 11px;
     color: var(--text); background: var(--surface);
     border: 1px solid var(--border); padding: 3px 4px; outline: none;
   }
@@ -1348,10 +1349,15 @@ globalThis.Sycritters = (function () {
       }
       const dl = document.createElement("button");
       dl.className = "btn cast__dl"; dl.textContent = "⤓ seq";
-      dl.title = "download the selected cycle as numbered PNG frames";
+      dl.title = "download the selected cycle as numbered PNG frames (alpha)";
       dl.setAttribute("aria-label", "download " + m.name + " PNG sequence");
       dl.addEventListener("click", () => downloadCastSequence(m, sel.value));
-      row.appendChild(sel); row.appendChild(dl);
+      const vid = document.createElement("button");
+      vid.className = "btn cast__dl"; vid.textContent = "⤓ vid";
+      vid.title = "record the selected cycle as mp4/webm (white background)";
+      vid.setAttribute("aria-label", "download " + m.name + " video");
+      vid.addEventListener("click", () => downloadCastVideo(m, sel.value, vid));
+      row.appendChild(sel); row.appendChild(dl); row.appendChild(vid);
       tile.appendChild(rm); tile.appendChild(c); tile.appendChild(label); tile.appendChild(row);
       castGrid.appendChild(tile);
     });
@@ -1360,7 +1366,11 @@ globalThis.Sycritters = (function () {
   // --- per-member PNG sequences (numbered frames, transparent bg) --------
   // Each cycle is authored to loop seamlessly: body cycles use their integer
   // tables; paint cycles map i/n onto one exact period of their motion.
-  const CAST_CYCLES = { jump: 12, walk: 6, bob: 4, blink: 12, pulse: 24, sheen: 24, scan: 24 };
+  const CAST_CYCLES = {
+    jump: 12, walk: 6, bob: 4, blink: 12, pulse: 24, sheen: 24, scan: 24,
+    // prototype motions
+    shake: 8, nod: 8, dance: 8, look: 12, sleep: 12,
+  };
 
   function castFrame(spec, cycle, i, n) {
     const fr = { gaze: spec.eyes.gaze || { dx: 0, dy: 0 }, blink: false };
@@ -1383,6 +1393,29 @@ globalThis.Sycritters = (function () {
       paint = gradientPaint(hexes(spec), spec.gradientDir, "sheen", (i / n) * 56);
     } else if (cycle === "scan") {
       paint = gradientPaint(hexes(spec), spec.gradientDir, "scan-y", (i / n) * 36);
+    } else if (cycle === "shake") {
+      // quick "no" headshake
+      transform = { dx: [0, 1, 0, -1, 0, 1, 0, -1][i], dy: 0, squashY: 1 };
+    } else if (cycle === "nod") {
+      // double "yes" dip, gaze following the dip
+      const down = [0, 1, 1, 0, 0, 1, 1, 0][i];
+      transform = { dx: 0, dy: down, squashY: 1 };
+      fr.gaze = { dx: 0, dy: down ? 1 : 0 };
+    } else if (cycle === "dance") {
+      // sway side to side with a squash on each beat, feet planted
+      transform = {
+        dx: [0, 1, 1, 0, 0, -1, -1, 0][i],
+        dy: [0, -1, 0, 0, 0, -1, 0, 0][i],
+        squashY: [1, 0.88, 1, 1, 1, 0.88, 1, 1][i],
+      };
+      fr.legShift = [0, -1, -1, 0, 0, 1, 1, 0][i];
+    } else if (cycle === "look") {
+      // eyes-only glance to the side and back
+      fr.gaze = { dx: [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0][i], dy: 0 };
+    } else if (cycle === "sleep") {
+      // lids shut, slow breathing squash
+      fr.blink = 2;
+      transform = { dx: 0, dy: 0, squashY: [1, 1, 1, 0.94, 0.94, 0.94, 0.94, 0.94, 0.94, 1, 1, 1][i] };
     }
     return { grid: S.rasterize(spec, fr), paint, transform };
   }
@@ -1405,6 +1438,61 @@ globalThis.Sycritters = (function () {
       a.click();
       if (++i < n) setTimeout(next, 120); // spaced so the browser accepts the burst
     })();
+  }
+
+  // --- per-member video capture (MediaRecorder; mp4 where supported) -----
+  // Video containers have no alpha channel, so frames are composited onto
+  // white; the PNG sequences remain the alpha-true export.
+  function recordCastVideo(member, cycle, opts) {
+    const { scale = 32, loops = 4, fps = 12 } = opts || {};
+    return new Promise((resolve, reject) => {
+      const spec = specFromString(member.code);
+      if (!spec || !CAST_CYCLES[cycle]) return reject(new Error("unknown member or cycle"));
+      const n = CAST_CYCLES[cycle], pad = 4;
+      const c = document.createElement("canvas");
+      c.width = c.height = (8 + 2 * pad) * scale;
+      const ctx = c.getContext("2d");
+      const stream = c.captureStream(0); // we push frames explicitly
+      const track = stream.getVideoTracks()[0];
+      const mime = MediaRecorder.isTypeSupported("video/mp4") ? "video/mp4"
+        : MediaRecorder.isTypeSupported("video/webm;codecs=vp9") ? "video/webm;codecs=vp9"
+        : "video/webm";
+      const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 8000000 });
+      const chunks = [];
+      rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+      rec.onstop = () => resolve(new Blob(chunks, { type: mime.split(";")[0] }));
+      rec.onerror = (e) => reject(e.error || new Error("recording failed"));
+      rec.start();
+      const tmp = document.createElement("canvas");
+      const total = n * loops;
+      let i = 0;
+      (function tick() {
+        const f = castFrame(spec, cycle, i % n, n);
+        drawCanvas(tmp, f.grid, f.paint, scale, f.transform, pad);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, c.width, c.height);
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(tmp, 0, 0);
+        if (track.requestFrame) track.requestFrame();
+        if (++i < total) setTimeout(tick, 1000 / fps);
+        else setTimeout(() => rec.stop(), 250); // let the encoder drain
+      })();
+    });
+  }
+
+  function downloadCastVideo(member, cycle, btn) {
+    const label = btn.textContent;
+    btn.disabled = true; btn.textContent = "rec…";
+    recordCastVideo(member, cycle).then((blob) => {
+      const safe = member.name.replace(/[^\w-]+/g, "_") || "critter";
+      const ext = blob.type.includes("mp4") ? "mp4" : "webm";
+      const a = document.createElement("a");
+      a.download = `${safe}-${cycle}.${ext}`;
+      a.href = URL.createObjectURL(blob);
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    }).catch((err) => console.warn("video capture failed:", err))
+      .finally(() => { btn.disabled = false; btn.textContent = label; });
   }
 
   $("addCast").addEventListener("click", () => {
