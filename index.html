@@ -583,7 +583,9 @@ globalThis.Sycritters = (function () {
 
   function stampEyes(g, spec, frame) {
     const gaze = (frame && frame.gaze) || spec.eyes.gaze || { dx: 0, dy: 0 };
-    const blink = !!(frame && frame.blink);
+    // blink phases: 0 open · 1 squint (slit + pupil) · 2 closed (dark lid line);
+    // legacy boolean true = fully closed
+    const blink = frame && frame.blink === true ? 2 : (frame && frame.blink) || 0;
     const gap = spec.eyes.gap || 1;      // px between the eyes
     const align = spec.eyes.align || "center";
     const style = spec.eyes.style;
@@ -633,17 +635,24 @@ globalThis.Sycritters = (function () {
       for (let ey = 0; ey < h; ey++)
         for (let ex = 0; ex < w; ex++) cells.push([bx + ex, r0 + ey]);
     frameBody(cells);                          // solid body around + behind the eyes
-    for (const [x, y] of cells) g[y][x] = 2;   // eye-white
-    if (!blink)
-      bases.forEach((bx, i) => {
-        let pdx = w === 1 ? 0 : gaze.dx > 0 ? 1 : 0;
-        if (mirror && i === 1 && w === 2) pdx = 1 - pdx;
-        const py = h === 1 ? r0
-          : w === 1 ? r0 + (gaze.dy < 0 ? 0 : 1)   // tall eyes rest low
-          : r0 + (gaze.dy > 0 ? 1 : 0);
-        if (bar) { g[r0][bx + pdx] = 3; g[r0 + 1][bx + pdx] = 3; }
-        else g[py][bx + pdx] = 3;                  // pupil
-      });
+    const lidRow = r0 + h - 1;                 // the row the eyelid closes onto
+    if (blink === 2) {
+      // closed: the eye region is body except a dark lid line
+      for (const [x, y] of cells) g[y][x] = y === lidRow ? 3 : 1;
+      return;
+    }
+    // open (all white) or squint (only the lid row stays open)
+    for (const [x, y] of cells) g[y][x] = blink === 1 && y !== lidRow ? 1 : 2;
+    bases.forEach((bx, i) => {
+      let pdx = w === 1 ? 0 : gaze.dx > 0 ? 1 : 0;
+      if (mirror && i === 1 && w === 2) pdx = 1 - pdx;
+      if (blink === 1) { g[lidRow][bx + pdx] = 3; return; } // 1px pupil in the slit
+      const py = h === 1 ? r0
+        : w === 1 ? r0 + (gaze.dy < 0 ? 0 : 1)   // tall eyes rest low
+        : r0 + (gaze.dy > 0 ? 1 : 0);
+      if (bar) { g[r0][bx + pdx] = 3; g[r0 + 1][bx + pdx] = 3; }
+      else g[py][bx + pdx] = 3;                  // pupil
+    });
   }
 
   // --- Self test: sweep invariants over many generated critters ----------
@@ -949,7 +958,8 @@ globalThis.Sycritters = (function () {
       { dx: 1, dy: 1 }, { dx: 0, dy: 0 }, { dx: -1, dy: 1 }, { dx: 0, dy: 0 },
     ];
     const gaze = dirs[Math.floor(frame / 22) % dirs.length];
-    const blink = frame % 96 < 2; // ~2 frames every 8s
+    const b = frame % 96; // ~every 8s: squint, closed, closed, squint
+    const blink = b === 0 || b === 3 ? 1 : b === 1 || b === 2 ? 2 : 0;
     return { gaze, blink };
   }
   function stateEyeFrame(frame) {
@@ -1366,7 +1376,7 @@ globalThis.Sycritters = (function () {
     } else if (cycle === "bob") {
       transform = { dx: 0, dy: [0, 0, -1, -1][i], squashY: 1 };
     } else if (cycle === "blink") {
-      fr.blink = i === 6 || i === 7;
+      fr.blink = [0, 0, 0, 0, 1, 2, 2, 1, 0, 0, 0, 0][i]; // ease shut, ease open
     } else if (cycle === "pulse") {
       paint = gradientPaint(hexes(spec), spec.gradientDir, "pulse", (i / n) * 2 * Math.PI * 22);
     } else if (cycle === "sheen") {

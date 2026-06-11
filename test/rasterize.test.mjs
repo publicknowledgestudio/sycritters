@@ -169,6 +169,35 @@ test("visor2 is a 2px-tall band with white holes", () => {
   assert.ok(g[3].includes(2) && g[4].includes(2), "white holes on both rows");
 });
 
+test("blink phases: squint keeps the lower eye row, closed leaves a lid line", () => {
+  const spec = {
+    ...S.generate("x"), top: "flat", bottom: "flat", waist: "straight",
+    eyes: { style: "normal", row: 3, gap: 1, align: "center", gaze: { dx: 0, dy: 0 }, pupil: "bar", mirror: false },
+  };
+  // half-closed (squint): top eye row becomes body, bottom row stays white with a pupil
+  const half = S.rasterize(spec, { blink: 1 });
+  assert.ok(!half[3].includes(2) && !half[3].includes(3), "top eye row closed");
+  assert.ok(half[4].includes(2), "lower eye row still white");
+  assert.ok(half[4].includes(3), "pupil visible in the squint");
+  // fully closed: no whites anywhere, a dark lid line where the lower row was
+  const closed = S.rasterize(spec, { blink: 2 });
+  assert.ok(!closed.flat().includes(2), "no eye-white when closed");
+  assert.ok(closed[4].includes(3), "dark lid line on the lower eye row");
+  assert.ok(!closed[3].includes(3), "no marks on the upper eye row");
+  // legacy boolean true still means fully closed
+  assert.equal(JSON.stringify(S.rasterize(spec, { blink: true })), JSON.stringify(closed));
+});
+
+test("blinking never changes the silhouette (no body flicker)", () => {
+  for (const seed of ["a", "b", "c", "d"]) {
+    const spec = S.generate(seed);
+    const shape = (g) => g.map((r) => r.map((c) => (c ? 1 : 0)).join("")).join("|");
+    const open = shape(S.rasterize(spec));
+    assert.equal(shape(S.rasterize(spec, { blink: 1 })), open, seed + ": squint altered the body");
+    assert.equal(shape(S.rasterize(spec, { blink: 2 })), open, seed + ": closed altered the body");
+  }
+});
+
 test("eyes are always present (white + pupil)", () => {
   for (const seed of ["a","b","c","d","e","f"]) {
     const g = grid(seed);
