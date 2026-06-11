@@ -404,8 +404,11 @@ globalThis.Sycritters = (function () {
       waist = "bite-r";
     const align = (r(), "center"); // random eyes stay centered; left/right is a manual control
     const gaze = { dx: r() < 0.5 ? 0 : 1, dy: r() < 0.6 ? 0 : 1 };
-    const pupil = style === "normal" && r() < 0.25 ? "bar" : "dot"; // 1x2 bar pupils, 2x2 eyes only
-    const mirror = r() < 0.35; // pupils mirror (inward/outward) instead of parallel
+    // random eyes are always parallel bar pupils (rolls kept so seeds don't shift);
+    // dot pupils and mirrored gaze stay manual picks
+    r(); r();
+    const pupil = "bar";
+    const mirror = false;
     return { seed: String(seed), colors, gradientDir, gradientMotion, top, bottom, waist,
       eyes: { style, row, gap, align, gaze, pupil, mirror } };
   }

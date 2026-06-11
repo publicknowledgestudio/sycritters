@@ -15,8 +15,8 @@ test("generate produces a spec with valid axes", () => {
   assert.ok(S.BOTTOMS.some(m => m.name === spec.bottom));
   assert.ok(["straight", "pinch", "narrow", "bite-l", "bite-r"].includes(spec.waist));
   assert.equal(spec.eyes.style, "normal");
-  assert.ok(["dot", "bar"].includes(spec.eyes.pupil));
-  assert.equal(typeof spec.eyes.mirror, "boolean");
+  assert.equal(spec.eyes.pupil, "bar", "random eyes always use bar pupils");
+  assert.equal(spec.eyes.mirror, false, "random gaze is always parallel");
   assert.ok([1, 2].includes(spec.eyes.gap));
   assert.ok(["left", "center", "right"].includes(spec.eyes.align));
   assert.ok(spec.eyes.row >= 2 && spec.eyes.row <= 3);
