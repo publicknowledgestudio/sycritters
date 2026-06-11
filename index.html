@@ -1386,7 +1386,9 @@ globalThis.Sycritters = (function () {
     let i = 0;
     (function next() {
       const f = castFrame(spec, cycle, i, n);
-      drawCanvas(c, f.grid, f.paint, scale, f.transform, 2); // pad 2 = jump headroom
+      // pad 4 = safe space on every side: motion never grazes the frame edge,
+      // and 16x16 cells at scale 32 gives AE-friendly 512x512 frames
+      drawCanvas(c, f.grid, f.paint, scale, f.transform, 4);
       const a = document.createElement("a");
       a.download = `${safe}-${cycle}-${String(i).padStart(2, "0")}.png`;
       a.href = c.toDataURL("image/png");
