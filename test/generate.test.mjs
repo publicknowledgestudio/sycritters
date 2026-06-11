@@ -54,6 +54,21 @@ test("generate bakes a seeded resting gaze that varies across seeds", () => {
   assert.ok(gazes.size >= 2, "resting gaze should vary across seeds");
 });
 
+test("every random bite renders visibly (spec and render agree)", () => {
+  // the eye frame refills empty cells next to eyes; generate must only roll
+  // bites on the side the frame leaves alone
+  let bites = 0;
+  for (let i = 0; i < 400; i++) {
+    const spec = S.generate("bite-sweep-" + i);
+    if (!spec.waist.startsWith("bite")) continue;
+    bites++;
+    const g = S.rasterize(spec);
+    const col = spec.waist === "bite-l" ? 0 : 7;
+    assert.ok(g[3][col] === 0 || g[4][col] === 0, `${spec.seed}: bite erased by the eye frame`);
+  }
+  assert.ok(bites > 0, "sweep produced at least one bite");
+});
+
 test("randomSeed returns a usable string", () => {
   const seed = S.randomSeed(S._test.rng("x"));
   assert.equal(typeof seed, "string");

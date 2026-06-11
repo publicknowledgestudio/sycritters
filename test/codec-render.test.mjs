@@ -48,6 +48,23 @@ test("legacy horizontal and vertical directions decode to supported behaviors", 
   assert.equal(S.specFromString(legacyHorizontal).gradientMotion, "static");
 });
 
+test("codec rejects non-integer or padded numeric fields", () => {
+  assert.equal(S.specFromString("2~s~01~0~0~0~0~0~0~2~1~0~4.5~0~0"), null, "fractional gaze");
+  assert.equal(S.specFromString("2~s~01~~~~~~~2~1~~4~0~0"), null, "empty fields");
+  assert.equal(S.specFromString("2~s~01~0~0~0~0~0~0~ 2~1~0~4~0~0"), null, "padded row");
+  assert.equal(S.specFromString("2~s~01~0x1~0~0~0~0~0~2~1~0~4~0~0"), null, "hex field");
+});
+
+test("legShift moves 2-row stilts (tripod2) coherently", () => {
+  const spec = {
+    ...S.generate("x"), top: "flat", bottom: "tripod2", waist: "straight",
+    eyes: { style: "normal", row: 3, gap: 1, align: "center", gaze: { dx: 0, dy: 0 } },
+  };
+  const g = S.rasterize(spec, { legShift: 1 });
+  assert.equal(g[6].join(""), "01101101", "upper stilt row shifts with the feet");
+  assert.equal(g[7].join(""), "01101101", "feet row shifts");
+});
+
 test("toSVG emits eye-white and pupil rects", () => {
   const svg = S.toSVG(S.rasterize(S.generate("svg-test")), "#29abe2", 8);
   assert.ok(svg.startsWith("<svg"));

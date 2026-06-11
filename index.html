@@ -390,13 +390,18 @@ globalThis.Sycritters = (function () {
     const bottom = pick(r, bpool).name;
     let waist = ["straight", "straight", "straight", "pinch", "pinch", "narrow"][Math.floor(r() * 6)];
     if ((slant(top) || slant(bottom)) && waist === "narrow") waist = "straight"; // slant already trims
-    // mild one-sided bite (kept off slanted bodies so asymmetry never compounds)
-    const biteRoll = r(), biteSide = r() < 0.5 ? "bite-l" : "bite-r";
-    if (waist === "straight" && !slant(top) && !slant(bottom) && biteRoll < 0.15) waist = biteSide;
+    // mild one-sided bite, decided after the eye gap below so spec and render
+    // always agree (both rolls kept here so downstream seeds don't shift)
+    const biteRoll = r(); r();
     r(); // keep seeded RNG sequence stable while eyes are temporarily fixed.
     const style = "normal";
     const row = 2 + (r() < 0.5 ? 0 : 1);               // 2 or 3
     const gap = r() < 0.5 ? 1 : 2;                      // px between the eyes (no 0)
+    // the eye frame refills empty cells next to eyes: gap-1 centered eyes sit
+    // at cols 1-2 / 4-5, leaving only col 7 clear -> random bites are right-
+    // side and gap-1 only; bite-l stays a manual pick
+    if (biteRoll < 0.15 && waist === "straight" && gap === 1 && !slant(top) && !slant(bottom))
+      waist = "bite-r";
     const align = (r(), "center"); // random eyes stay centered; left/right is a manual control
     const gaze = { dx: r() < 0.5 ? 0 : 1, dy: r() < 0.6 ? 0 : 1 };
     const pupil = style === "normal" && r() < 0.25 ? "bar" : "dot"; // 1x2 bar pupils, 2x2 eyes only
@@ -443,14 +448,21 @@ globalThis.Sycritters = (function () {
     if (spec.waist === "bite-l") for (const y of [3, 4]) g[y][0] = 0;
     if (spec.waist === "bite-r") for (const y of [3, 4]) g[y][7] = 0;
 
-    // frame.legShift ∈ {-1,0,1}: nudge the feet row sideways (celebrate cycle).
+    // frame.legShift ∈ {-1,0,1}: nudge the feet sideways (celebrate cycle).
+    // Row 6 shifts along with row 7 when it has gaps (2-row stilts like
+    // tripod2 must move as one piece instead of shearing).
     if (frame && frame.legShift) {
-      const s = frame.legShift, row = g[7], out = new Array(8).fill(0);
-      for (let x = 0; x < 8; x++) {
-        const nx = x + s;
-        if (nx >= 0 && nx < 8) out[nx] = row[x];
-      }
-      g[7] = out;
+      const s = frame.legShift;
+      const shiftRow = (row) => {
+        const out = new Array(8).fill(0);
+        for (let x = 0; x < 8; x++) {
+          const nx = x + s;
+          if (nx >= 0 && nx < 8) out[nx] = row[x];
+        }
+        return out;
+      };
+      g[7] = shiftRow(g[7]);
+      if (g[6].includes(0)) g[6] = shiftRow(g[6]);
     }
 
     stampEyes(g, spec, frame);
@@ -710,6 +722,9 @@ globalThis.Sycritters = (function () {
     // v2 adds pupil + mirror; v1 links keep working with safe defaults
     const v2 = p[0] === "2" && p.length === 15;
     if (!v2 && !(p[0] === "1" && p.length === 13)) return null;
+    // strict: every field after the seed is plain digits — rejects "", " 4",
+    // "4.5", "0x1" so one permalink string means exactly one spec
+    if (!p.slice(2).every((v) => /^\d+$/.test(v))) return null;
     const idx = (v, arr) => { const i = +v; return Number.isInteger(i) && i >= 0 && i < arr.length ? i : -1; };
     const colors = [...p[2]].map((d) => PALETTE[+d]).filter(Boolean);
     const di = idx(p[3], DIRS), mi = idx(p[4], MOTIONS), ti = idx(p[5], TOPS),
