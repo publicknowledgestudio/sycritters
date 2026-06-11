@@ -306,6 +306,10 @@
   <section class="cast">
     <div class="wall__head">
       <h2>Video Cast</h2>
+      <div class="exportrow">
+        <button id="dumpCast" class="btn" title="download + copy the cast as JSON">Dump JSON</button>
+        <button id="castPage" class="btn" title="download a standalone index.html with just the cast + exports">Export cast page</button>
+      </div>
     </div>
     <div id="castGrid" class="cast__grid">
       <div class="wall__empty">no cast yet &mdash; add the current critter from the editor&hellip;</div>
@@ -1494,6 +1498,107 @@ globalThis.Sycritters = (function () {
     }).catch((err) => console.warn("video capture failed:", err))
       .finally(() => { btn.disabled = false; btn.textContent = label; });
   }
+
+  // --- cast handoff: JSON dump + a standalone cast page ------------------
+  function downloadCastDump() {
+    const json = JSON.stringify(loadCast(), null, 2);
+    const a = document.createElement("a");
+    a.download = "sycritters-cast.json";
+    a.href = URL.createObjectURL(new Blob([json], { type: "application/json" }));
+    a.click();
+    if (navigator.clipboard) navigator.clipboard.writeText(json).catch(() => {});
+  }
+
+  // Assembles a self-contained cast page from the LIVE engine script plus the
+  // exact helper functions this page runs (Function.toString), so the handoff
+  // file can never drift from the app. Embedded sources are sanitised so a
+  // stray script-closing tag inside them can't end the generated tags early.
+  function buildCastPageHTML() {
+    const safe = (s) => s.replace(/<\/script>/gi, "<\\/script>");
+    const engineSrc = [...document.scripts].map((s) => s.textContent)
+      .find((t) => t.includes("globalThis.Sycritters ="));
+    const helpers = [restPaint, paintCells, drawCanvas, castFrame,
+      downloadCastSequence, recordCastVideo, downloadCastVideo]
+      .map((f) => f.toString()).join("\n\n");
+    return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sycritters — Video Cast</title>
+<style>
+  body { margin: 0; font-family: ui-monospace, "DM Mono", monospace; font-size: 13px; color: #1a1a1a; background: #fff; padding: 32px 28px; }
+  h1 { font-size: 16px; letter-spacing: 2px; text-transform: uppercase; margin: 0 0 6px; }
+  h1 b { color: #ff3e00; }
+  .hint { color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 28px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; }
+  .member { border: 1px solid #d4d4d0; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+  .member canvas { width: 100%; height: auto; image-rendering: pixelated; display: block; }
+  .name { font-weight: 700; text-align: center; }
+  select, button { font-family: inherit; font-size: 11px; text-transform: uppercase; border: 1px solid #d4d4d0; background: #fff; padding: 6px; cursor: pointer; }
+  button:hover { border-color: #1a1a1a; background: #1a1a1a; color: #fff; }
+  .row { display: flex; gap: 6px; }
+  .row button { flex: 1; }
+</style>
+</head>
+<body>
+<h1>SY<b>CRITTERS</b> — video cast</h1>
+<p class="hint">png sequences: transparent 512&times;512 @ 12fps &middot; videos: mp4/webm on white</p>
+<div id="cast" class="grid"></div>
+<script>
+${safe(engineSrc)}
+<\/script>
+<script>
+const S = globalThis.Sycritters;
+const { gradientPaint, cellFill, specFromString } = S;
+const WALK_LEGS = ${JSON.stringify(WALK_LEGS)};
+const CAST_CYCLES = ${JSON.stringify(CAST_CYCLES)};
+const hexes = ${safe(hexes.toString())};
+${safe(helpers)}
+const CAST = ${safe(JSON.stringify(loadCast()))};
+const FPS = 12, host = document.getElementById("cast"), live = [];
+for (const m of CAST) {
+  const spec = specFromString(m.code);
+  if (!spec) continue;
+  const tile = document.createElement("div"); tile.className = "member";
+  const c = document.createElement("canvas");
+  const name = document.createElement("div"); name.className = "name"; name.textContent = m.name;
+  const sel = document.createElement("select");
+  for (const k of Object.keys(CAST_CYCLES)) { const o = document.createElement("option"); o.value = k; o.textContent = k; sel.appendChild(o); }
+  const row = document.createElement("div"); row.className = "row";
+  const seq = document.createElement("button"); seq.textContent = "\\u2913 png seq";
+  seq.addEventListener("click", () => downloadCastSequence(m, sel.value));
+  const vid = document.createElement("button"); vid.textContent = "\\u2913 video";
+  vid.addEventListener("click", () => downloadCastVideo(m, sel.value, vid));
+  row.appendChild(seq); row.appendChild(vid);
+  tile.appendChild(c); tile.appendChild(name); tile.appendChild(sel); tile.appendChild(row);
+  host.appendChild(tile);
+  live.push({ spec, sel, canvas: c });
+}
+(function loop(t) {
+  const frame = Math.floor((t || 0) / (1000 / FPS));
+  for (const v of live) {
+    const n = CAST_CYCLES[v.sel.value];
+    const f = castFrame(v.spec, v.sel.value, frame % n, n);
+    drawCanvas(v.canvas, f.grid, f.paint, 10, f.transform, 4);
+  }
+  requestAnimationFrame(loop);
+})();
+<\/script>
+</body>
+</html>
+`;
+  }
+
+  function downloadCastPage() {
+    const a = document.createElement("a");
+    a.download = "index.html";
+    a.href = URL.createObjectURL(new Blob([buildCastPageHTML()], { type: "text/html" }));
+    a.click();
+  }
+
+  $("dumpCast").addEventListener("click", downloadCastDump);
+  $("castPage").addEventListener("click", downloadCastPage);
 
   $("addCast").addEventListener("click", () => {
     castName.value = current.seed;
