@@ -169,6 +169,34 @@
   .tile canvas { display: block; width: 100%; height: auto; image-rendering: pixelated; }
   .wall__empty { color: var(--text-dim); font-size: 12px; padding: 16px 2px; }
 
+  /* ---- video cast ---- */
+  .cast { margin-top: 44px; }
+  .cast__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
+  .cast__member {
+    position: relative; display: flex; flex-direction: column; gap: 6px;
+    background: var(--surface); border: 1px solid var(--border); padding: 10px;
+  }
+  .cast__member canvas { display: block; width: 100%; height: auto; image-rendering: pixelated; cursor: pointer; }
+  .cast__name {
+    font-size: 11px; color: var(--text); letter-spacing: .5px;
+    text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .cast__remove {
+    position: absolute; top: 2px; right: 2px;
+    font-family: var(--mono); font-size: 12px; line-height: 1;
+    background: var(--surface); color: var(--text-dim);
+    border: 1px solid transparent; padding: 2px 5px; cursor: pointer;
+  }
+  .cast__remove:hover { color: var(--accent); border-color: var(--border); }
+
+  /* ---- naming dialog ---- */
+  dialog {
+    background: var(--surface); color: var(--text);
+    border: 1px solid var(--text); padding: 20px; min-width: 280px;
+  }
+  dialog::backdrop { background: rgba(26, 26, 26, .35); }
+  dialog .field { margin-bottom: 14px; }
+
   .foot { margin-top: 44px; color: var(--text-dim); font-size: 11px; letter-spacing: .5px; text-transform: uppercase; }
   .foot a { color: var(--accent); text-decoration: none; }
   .foot a:hover { text-decoration: underline; }
@@ -258,10 +286,35 @@
           <button id="link" class="btn" title="copy a shareable link">Link</button>
         </div>
       </div>
+
+      <div class="ctl">
+        <label class="ctl__label">&#9646; Video</label>
+        <button id="addCast" class="btn btn--full">Add to Video Cast</button>
+      </div>
     </aside>
   </section>
 
+  <section class="cast">
+    <div class="wall__head">
+      <h2>Video Cast</h2>
+    </div>
+    <div id="castGrid" class="cast__grid">
+      <div class="wall__empty">no cast yet &mdash; add the current critter from the editor&hellip;</div>
+    </div>
+  </section>
+
   <footer class="foot">made with pixels &middot; same seed &rarr; same critter</footer>
+
+  <dialog id="castDialog">
+    <form id="castForm" method="dialog">
+      <label class="ctl__label" for="castName">&#9646; Name this critter</label>
+      <input id="castName" class="field" spellcheck="false" autocomplete="off" maxlength="40" />
+      <div class="exportrow">
+        <button type="button" id="castCancel" class="btn">Cancel</button>
+        <button type="submit" id="castSave" class="btn">Save</button>
+      </div>
+    </form>
+  </dialog>
 </main>
 
 <!-- SYCRITTERS-ENGINE:START -->
@@ -1213,9 +1266,80 @@ globalThis.Sycritters = (function () {
   els.link.addEventListener("click", copyLink);
   els.genWall.addEventListener("click", () => generateWall());
 
+  /* ---- video cast (named critters persisted to localStorage) ---------- */
+  const CAST_KEY = "sycritters-video-cast";
+  const castGrid = $("castGrid"), castDialog = $("castDialog"), castName = $("castName");
+
+  function loadCast() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(CAST_KEY) || "[]");
+      if (!Array.isArray(raw)) return [];
+      // keep only entries whose stored spec still decodes (engine may evolve)
+      return raw.filter((m) => m && typeof m.name === "string" && specFromString(m.code));
+    } catch { return []; }
+  }
+  function saveCast(cast) {
+    try { localStorage.setItem(CAST_KEY, JSON.stringify(cast)); } catch {}
+  }
+
+  function renderCast() {
+    const cast = loadCast();
+    castGrid.innerHTML = "";
+    if (!cast.length) {
+      const empty = document.createElement("div");
+      empty.className = "wall__empty";
+      empty.textContent = "no cast yet — add the current critter from the editor…";
+      castGrid.appendChild(empty);
+      return;
+    }
+    cast.forEach((m, i) => {
+      const spec = specFromString(m.code);
+      const tile = document.createElement("div");
+      tile.className = "cast__member";
+      const c = document.createElement("canvas");
+      drawCanvas(c, S.rasterize(spec), restPaint(spec), 16);
+      c.title = "load " + m.name + " into the editor";
+      c.setAttribute("role", "img");
+      c.setAttribute("aria-label", m.name);
+      c.addEventListener("click", () => {
+        current = spec;
+        render();
+        document.querySelector(".stage").scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+      const label = document.createElement("div");
+      label.className = "cast__name"; label.textContent = m.name; label.title = m.name;
+      const rm = document.createElement("button");
+      rm.className = "cast__remove"; rm.textContent = "×";
+      rm.setAttribute("aria-label", "remove " + m.name + " from the cast");
+      rm.addEventListener("click", () => {
+        const next = loadCast();
+        next.splice(i, 1);
+        saveCast(next);
+        renderCast();
+      });
+      tile.appendChild(rm); tile.appendChild(c); tile.appendChild(label);
+      castGrid.appendChild(tile);
+    });
+  }
+
+  $("addCast").addEventListener("click", () => {
+    castName.value = current.seed;
+    castDialog.showModal();
+    castName.select();
+  });
+  $("castCancel").addEventListener("click", () => castDialog.close());
+  // form method="dialog": submitting closes the dialog after this handler runs
+  $("castForm").addEventListener("submit", () => {
+    const cast = loadCast();
+    cast.push({ name: castName.value.trim() || current.seed, code: specToString(current) });
+    saveCast(cast);
+    renderCast();
+  });
+
   buildSwatches();
   buildSegs();
   generateWall();
+  renderCast();
   render();
   requestAnimationFrame(loop);
 
