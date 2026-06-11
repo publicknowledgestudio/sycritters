@@ -188,6 +188,14 @@
     border: 1px solid transparent; padding: 2px 5px; cursor: pointer;
   }
   .cast__remove:hover { color: var(--accent); border-color: var(--border); }
+  .cast__row { display: flex; gap: 4px; }
+  .cast__cycle {
+    flex: 1; min-width: 0; font-family: var(--mono); font-size: 11px;
+    color: var(--text); background: var(--surface);
+    border: 1px solid var(--border); padding: 3px 4px; outline: none;
+  }
+  .cast__cycle:focus { border-color: var(--accent); }
+  .cast__dl { padding: 3px 8px; font-size: 9px; }
 
   /* ---- naming dialog ---- */
   dialog {
@@ -1317,9 +1325,74 @@ globalThis.Sycritters = (function () {
         saveCast(next);
         renderCast();
       });
-      tile.appendChild(rm); tile.appendChild(c); tile.appendChild(label);
+      // png-sequence row: cycle picker + download
+      const row = document.createElement("div");
+      row.className = "cast__row";
+      const sel = document.createElement("select");
+      sel.className = "cast__cycle";
+      sel.setAttribute("aria-label", "animation cycle for " + m.name);
+      for (const cyc of Object.keys(CAST_CYCLES)) {
+        const o = document.createElement("option");
+        o.value = cyc; o.textContent = cyc;
+        sel.appendChild(o);
+      }
+      const dl = document.createElement("button");
+      dl.className = "btn cast__dl"; dl.textContent = "⤓ seq";
+      dl.title = "download the selected cycle as numbered PNG frames";
+      dl.setAttribute("aria-label", "download " + m.name + " PNG sequence");
+      dl.addEventListener("click", () => downloadCastSequence(m, sel.value));
+      row.appendChild(sel); row.appendChild(dl);
+      tile.appendChild(rm); tile.appendChild(c); tile.appendChild(label); tile.appendChild(row);
       castGrid.appendChild(tile);
     });
+  }
+
+  // --- per-member PNG sequences (numbered frames, transparent bg) --------
+  // Each cycle is authored to loop seamlessly: body cycles use their integer
+  // tables; paint cycles map i/n onto one exact period of their motion.
+  const CAST_CYCLES = { jump: 12, walk: 6, bob: 4, blink: 12, pulse: 24, sheen: 24, scan: 24 };
+
+  function castFrame(spec, cycle, i, n) {
+    const fr = { gaze: spec.eyes.gaze || { dx: 0, dy: 0 }, blink: false };
+    let transform = null, paint = restPaint(spec);
+    if (cycle === "jump") {
+      const dyS = [0, -1, -2, -2, -1, 0, 0, 0, 0, 0, 0, 0];
+      const sqS = [1, 1, 1, 1, 1, 0.88, 1, 1, 1, 1, 1, 1];
+      transform = { dx: 0, dy: dyS[i], squashY: sqS[i] };
+    } else if (cycle === "walk") {
+      const dxS = [0, 1, 1, 0, -1, -1], dyS = [0, -1, 0, 0, -1, 0];
+      transform = { dx: dxS[i], dy: dyS[i], squashY: 1 };
+      fr.legShift = WALK_LEGS[i % WALK_LEGS.length];
+    } else if (cycle === "bob") {
+      transform = { dx: 0, dy: [0, 0, -1, -1][i], squashY: 1 };
+    } else if (cycle === "blink") {
+      fr.blink = i === 6 || i === 7;
+    } else if (cycle === "pulse") {
+      paint = gradientPaint(hexes(spec), spec.gradientDir, "pulse", (i / n) * 2 * Math.PI * 22);
+    } else if (cycle === "sheen") {
+      paint = gradientPaint(hexes(spec), spec.gradientDir, "sheen", (i / n) * 56);
+    } else if (cycle === "scan") {
+      paint = gradientPaint(hexes(spec), spec.gradientDir, "scan-y", (i / n) * 36);
+    }
+    return { grid: S.rasterize(spec, fr), paint, transform };
+  }
+
+  function downloadCastSequence(member, cycle, scale = 32) {
+    const spec = specFromString(member.code);
+    if (!spec || !CAST_CYCLES[cycle]) return;
+    const n = CAST_CYCLES[cycle];
+    const safe = member.name.replace(/[^\w-]+/g, "_") || "critter";
+    const c = document.createElement("canvas");
+    let i = 0;
+    (function next() {
+      const f = castFrame(spec, cycle, i, n);
+      drawCanvas(c, f.grid, f.paint, scale, f.transform, 2); // pad 2 = jump headroom
+      const a = document.createElement("a");
+      a.download = `${safe}-${cycle}-${String(i).padStart(2, "0")}.png`;
+      a.href = c.toDataURL("image/png");
+      a.click();
+      if (++i < n) setTimeout(next, 120); // spaced so the browser accepts the burst
+    })();
   }
 
   $("addCast").addEventListener("click", () => {
