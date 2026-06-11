@@ -48,6 +48,92 @@ test("'2tr' is a shallower 2-step cut than '3tr'", () => {
   assert.equal(g[2][7], 1);                           // doesn't reach row 2
 });
 
+test("handle top has a full cap with open side pixels below", () => {
+  const spec = {
+    ...S.generate("x"), top: "handle", bottom: "flat", waist: "straight",
+    eyes: { style: "normal", row: 5, gap: 1, align: "center", gaze: { dx: 0, dy: 0 } },
+  };
+  const g = S.rasterize(spec);
+  assert.equal(JSON.stringify(g[0]), JSON.stringify([1,1,1,1,1,1,1,1]));
+  assert.equal(JSON.stringify(g[1]), JSON.stringify([0,1,1,1,1,1,1,0]));
+});
+
+test("lego top has a four-wide nub over a full row", () => {
+  const spec = {
+    ...S.generate("x"), top: "lego", bottom: "flat", waist: "straight",
+    eyes: { style: "normal", row: 5, gap: 1, align: "center", gaze: { dx: 0, dy: 0 } },
+  };
+  const g = S.rasterize(spec);
+  assert.equal(JSON.stringify(g[0]), JSON.stringify([0,0,1,1,1,1,0,0]));
+  assert.equal(JSON.stringify(g[1]), JSON.stringify([1,1,1,1,1,1,1,1]));
+});
+
+test("tail-l top has a left-side two-pixel cut over a full row", () => {
+  const spec = {
+    ...S.generate("x"), top: "tail-l", bottom: "flat", waist: "straight",
+    eyes: { style: "normal", row: 5, gap: 1, align: "center", gaze: { dx: 0, dy: 0 } },
+  };
+  const g = S.rasterize(spec);
+  assert.equal(JSON.stringify(g[0]), JSON.stringify([1,0,0,1,1,1,1,1]));
+  assert.equal(JSON.stringify(g[1]), JSON.stringify([1,1,1,1,1,1,1,1]));
+});
+
+test("tail-r top has a right-side two-pixel cut over a full row", () => {
+  const spec = {
+    ...S.generate("x"), top: "tail-r", bottom: "flat", waist: "straight",
+    eyes: { style: "normal", row: 5, gap: 1, align: "center", gaze: { dx: 0, dy: 0 } },
+  };
+  const g = S.rasterize(spec);
+  assert.equal(JSON.stringify(g[0]), JSON.stringify([1,1,1,1,1,0,0,1]));
+  assert.equal(JSON.stringify(g[1]), JSON.stringify([1,1,1,1,1,1,1,1]));
+});
+
+test("eyes move down before their frame changes the top silhouette", () => {
+  const spec = {
+    ...S.generate("x"), top: "dome", bottom: "flat", waist: "straight",
+    eyes: { style: "normal", row: 2, gap: 1, align: "center", gaze: { dx: 0, dy: 0 } },
+  };
+  const g = S.rasterize(spec);
+  assert.equal(JSON.stringify(g.map((row) => row.map((c) => c ? 1 : 0)).slice(0, 4)), JSON.stringify([
+    [0,0,1,1,1,1,0,0],
+    [0,1,1,1,1,1,1,0],
+    [1,1,1,1,1,1,1,1],
+    [1,1,1,1,1,1,1,1],
+  ]));
+  assert.ok(g[3].includes(2), "eye whites start on row 3 after being pushed down");
+  assert.ok(!g[2].includes(2), "eye whites no longer start on row 2");
+});
+
+test("eyes prefer removing middle cutouts over moving into the bottom", () => {
+  const spec = {
+    ...S.generate("x"), top: "flat", bottom: "flat", waist: "pinch",
+    eyes: { style: "normal", row: 3, gap: 1, align: "center", gaze: { dx: 0, dy: 0 } },
+  };
+  const g = S.rasterize(spec);
+  assert.ok(g[3].includes(2), "eye whites stay on requested row 3");
+  assert.ok(!g[5].includes(2), "eyes are not pushed into the bottom half");
+  assert.equal(g[3][0], 1, "left middle cutout is filled back in for the eye frame");
+  assert.equal(g[3][7], 1, "right middle cutout is filled back in for the eye frame");
+});
+
+test("3tl plus round bottom and pinch waist makes the asymmetric reference shape", () => {
+  const spec = {
+    ...S.generate("x"), top: "3tl", bottom: "round", waist: "pinch",
+    eyes: { style: "tall", row: 3, gap: 1, align: "center", gaze: { dx: 0, dy: 0 } },
+  };
+  const g = S.rasterize(spec);
+  assert.equal(JSON.stringify(g.map((row) => row.map((c) => c ? 1 : 0))), JSON.stringify([
+    [0,0,0,1,1,1,1,1],
+    [0,0,1,1,1,1,1,1],
+    [0,1,1,1,1,1,1,1],
+    [0,1,1,1,1,1,1,0],
+    [0,1,1,1,1,1,1,0],
+    [1,1,1,1,1,1,1,1],
+    [0,1,1,1,1,1,1,0],
+    [0,0,1,1,1,1,0,0],
+  ]));
+});
+
 test("eye alignment shifts eyes left vs right", () => {
   const base = {
     ...S.generate("x"), top: "flat", bottom: "flat", waist: "straight",
@@ -90,6 +176,26 @@ test("eyes are always present (white + pupil)", () => {
     assert.ok(flat.includes(2), `${seed}: no eye-white`);
     assert.ok(flat.includes(3), `${seed}: no pupil`);
   }
+});
+
+test("toes-a leaves alternating foot gaps starting filled", () => {
+  const spec = {
+    ...S.generate("x"), top: "flat", bottom: "toes-a", waist: "straight",
+    eyes: { style: "normal", row: 3, gap: 1, align: "center", gaze: { dx: 0, dy: 0 } },
+  };
+  const g = S.rasterize(spec);
+  assert.equal(JSON.stringify(g[6]), JSON.stringify([1,1,1,1,1,1,1,1]));
+  assert.equal(JSON.stringify(g[7]), JSON.stringify([1,0,1,0,1,0,1,0]));
+});
+
+test("toes-b leaves alternating foot gaps starting empty", () => {
+  const spec = {
+    ...S.generate("x"), top: "flat", bottom: "toes-b", waist: "straight",
+    eyes: { style: "normal", row: 3, gap: 1, align: "center", gaze: { dx: 0, dy: 0 } },
+  };
+  const g = S.rasterize(spec);
+  assert.equal(JSON.stringify(g[6]), JSON.stringify([1,1,1,1,1,1,1,1]));
+  assert.equal(JSON.stringify(g[7]), JSON.stringify([0,1,0,1,0,1,0,1]));
 });
 
 test("every eye cell keeps a 1px solid body frame (no empty neighbor)", () => {

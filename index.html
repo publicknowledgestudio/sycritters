@@ -49,10 +49,13 @@
 
   /* ---- main stage ---- */
   .stage { display: grid; gap: 40px; align-items: start; grid-template-columns: minmax(0, 1fr) 280px; }
-  @media (max-width: 820px) { .stage { grid-template-columns: 1fr; } }
+  @media (max-width: 820px) {
+    .stage { grid-template-columns: 1fr; }
+    .specimen { position: static; }
+  }
 
   /* specimen (the editor preview) */
-  .specimen { display: flex; flex-direction: column; gap: 12px; }
+  .specimen { display: flex; flex-direction: column; gap: 12px; position: sticky; top: 24px; }
   .specimen__card {
     background: var(--surface); border: 1px solid var(--border);
     display: grid; place-items: center; padding: 16px; aspect-ratio: 1;
@@ -108,7 +111,7 @@
   .swatch:hover { border-color: var(--border-hover); }
   .swatch[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
   .swatch--rand {
-    background: conic-gradient(#ff3e00,#ffc63d,#2be89c,#2e8fe0,#8c7bf0,#ff3e00);
+    background: conic-gradient(#ffb000,#b8d94a,#5ee0a0,#28c7c7,#3b82f6,#6d5dfc,#c056d9,#ff6b5a,#ffb000);
     color: #fff; font-size: 12px; display: grid; place-items: center; font-weight: 700;
     text-shadow: 0 1px 1px rgba(0,0,0,.45);
   }
@@ -124,6 +127,21 @@
   .seg button[aria-pressed="true"] { background: var(--text); color: var(--surface); border-color: var(--text); }
   /* options random generation skips (manual / Surprise Me territory) */
   .seg button.spice::after { content: "·"; color: var(--accent); margin-left: 4px; font-weight: 700; }
+  .seg--preview button {
+    width: calc(50% - 3px); min-height: 42px; display: inline-flex; align-items: center;
+    justify-content: flex-start; gap: 8px; padding: 6px 7px; text-align: left;
+  }
+  .mini8 {
+    flex: 0 0 auto; display: grid; grid-template-columns: repeat(8, 3px);
+    grid-template-rows: repeat(8, 3px); gap: 1px; padding: 2px;
+    border: 1px solid var(--border); background: #f5f5f2;
+  }
+  .mini8 i { width: 3px; height: 3px; background: #ecece8; display: block; }
+  .mini8 i.on { background: var(--text); }
+  .seg button[aria-pressed="true"] .mini8 { border-color: var(--surface); background: #3a3a3a; }
+  .seg button[aria-pressed="true"] .mini8 i { background: #4f4f4f; }
+  .seg button[aria-pressed="true"] .mini8 i.on { background: var(--surface); }
+  .seg__text { min-width: 0; overflow-wrap: anywhere; }
 
   .check {
     display: flex; align-items: center; gap: 8px; margin-top: 12px;
@@ -135,7 +153,7 @@
   .exportrow .btn { flex: 1; }
 
   /* ---- the wall ---- */
-  .wall { margin-top: 44px; }
+  .wall { margin: 0 0 44px; }
   .wall__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; gap: 14px; }
   .wall__head h2 {
     font-family: var(--display); font-size: 12px; letter-spacing: 2px; text-transform: uppercase;
@@ -163,6 +181,14 @@
     <p class="tagline">an 8&times;8 pixel creature generator</p>
   </header>
 
+  <section class="wall">
+    <div class="wall__head">
+      <h2>The Wall</h2>
+      <button id="genWall" class="btn">Generate &#9656;</button>
+    </div>
+    <div id="grid" class="wall__grid"></div>
+  </section>
+
   <section class="stage">
     <div class="specimen">
       <div class="specimen__card"><canvas id="editor" width="256" height="256" role="img" aria-label="current critter preview"></canvas></div>
@@ -184,25 +210,23 @@
         <div id="palette" class="swatches"></div>
         <span class="sublabel">colors</span>
         <div id="colorCount" class="seg"></div>
-        <span class="sublabel">direction</span>
+        <span class="sublabel">gradient</span>
         <div id="gradDir" class="seg"></div>
-        <span class="sublabel">motion</span>
-        <div id="gradMotion" class="seg"></div>
       </div>
 
       <div class="ctl">
         <label class="ctl__label">&#9646; Top</label>
-        <div id="tops" class="seg"></div>
-      </div>
-
-      <div class="ctl">
-        <label class="ctl__label">&#9646; Bottom</label>
-        <div id="bottoms" class="seg"></div>
+        <div id="tops" class="seg seg--preview"></div>
       </div>
 
       <div class="ctl">
         <label class="ctl__label">&#9646; Middle <span>&mdash; the two waist rows</span></label>
-        <div id="waist" class="seg"></div>
+        <div id="waist" class="seg seg--preview"></div>
+      </div>
+
+      <div class="ctl">
+        <label class="ctl__label">&#9646; Bottom</label>
+        <div id="bottoms" class="seg seg--preview"></div>
       </div>
 
       <div class="ctl">
@@ -235,14 +259,6 @@
         </div>
       </div>
     </aside>
-  </section>
-
-  <section class="wall">
-    <div class="wall__head">
-      <h2>The Wall</h2>
-      <button id="genWall" class="btn">Generate &#9656;</button>
-    </div>
-    <div id="grid" class="wall__grid"><div class="wall__empty">press generate to fill the wall&hellip;</div></div>
   </section>
 
   <footer class="foot">made with pixels &middot; same seed &rarr; same critter</footer>
@@ -287,18 +303,19 @@ globalThis.Sycritters = (function () {
   // Ordered around the hue wheel so consecutive entries are analogous
   // (gradients are built from consecutive runs -> always harmonious).
   const PALETTE = [
-    { name: "orange",     hex: "#f7931e" },
-    { name: "lime",       hex: "#a0c814" },
-    { name: "spring",     hex: "#2be89c" },
-    { name: "cyan",       hex: "#29abe2" },
-    { name: "blue",       hex: "#2e8fe0" },
-    { name: "periwinkle", hex: "#8c7bf0" },
-    { name: "purple",     hex: "#8b1a89" },
-    { name: "pink",       hex: "#d6336c" },
+    { name: "amber",      hex: "#ffb000" },
+    { name: "chartreuse", hex: "#b8d94a" },
+    { name: "mint",       hex: "#5ee0a0" },
+    { name: "teal",       hex: "#28c7c7" },
+    { name: "azure",      hex: "#3b82f6" },
+    { name: "violet",     hex: "#6d5dfc" },
+    { name: "orchid",     hex: "#c056d9" },
+    { name: "coral",      hex: "#ff6b5a" },
   ];
 
   // --- Shared option lists (used by generate + the spec codec) -------------
-  const DIRS = ["diagonal", "horizontal", "vertical", "radial"];
+  const DIRS = ["none", "diagonal-left", "diagonal-right", "radial"];
+  // Legacy paint-motion codec axis. The UI now exposes agent states instead.
   const MOTIONS = ["static", "drift", "pulse", "sheen"];
   const WAISTS = ["straight", "pinch", "narrow", "bite-l", "bite-r"];
   const EYE_STYLES = ["normal", "tall", "visor", "visor2", "short"]; // appended: codec indices stay stable
@@ -319,6 +336,10 @@ globalThis.Sycritters = (function () {
     { name: "w",        rows: [[0,1,1,0],[0,1,1,1],[1,1,1,1],[1,1,1,1]] }, // horns, center fills a row lower
     { name: "trident",  rows: [[0,1,0,1],[1,1,1,1],[1,1,1,1],[1,1,1,1]] }, // three nubs
     { name: "dots",     rows: [[1,0,1,1],[0,1,1,1],[1,1,1,1],[1,1,1,1]] }, // detached corner pixels
+    { name: "handle",   rows: [[1,1,1,1],[0,1,1,1],[1,1,1,1],[1,1,1,1]] }, // full cap, open side pixels
+    { name: "lego",     rows: [[0,0,1,1],[1,1,1,1],[1,1,1,1],[1,1,1,1]] }, // centered 4-wide nub
+    { name: "tail-l", full: true, rows: [[1,0,0,1,1,1,1,1],[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1]] },
+    { name: "tail-r", full: true, rows: [[1,1,1,1,1,0,0,1],[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1]] },
     // asymmetric diagonal slants (full 8-wide, not mirrored); 2 = shallow, 3 = deep:
     { name: "2tl", full: true, rows: [[0,0,1,1,1,1,1,1],[0,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1]] },
     { name: "2tr", full: true, rows: [[1,1,1,1,1,1,0,0],[1,1,1,1,1,1,1,0],[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1]] },
@@ -330,10 +351,11 @@ globalThis.Sycritters = (function () {
     { name: "round",   rows: [[1,1,1,1],[1,1,1,1],[0,1,1,1],[0,0,1,1]] },
     { name: "legs",    rows: [[1,1,1,1],[1,1,1,1],[1,1,1,1],[0,1,1,0]] },
     { name: "splayed", rows: [[1,1,1,1],[1,1,1,1],[1,1,1,1],[1,1,0,0]] },
-    { name: "spikes",  rows: [[1,1,1,1],[1,1,1,1],[1,0,1,1],[1,0,0,1]] },
     { name: "tripod",  rows: [[1,1,1,1],[1,1,1,1],[1,1,1,1],[1,1,0,1]] }, // 2-1-2-1-2 legs
     { name: "tripod2", rows: [[1,1,1,1],[1,1,1,1],[1,1,0,1],[1,1,0,1]] }, // tripod on 2-row stilts
     { name: "toes",    rows: [[1,1,1,1],[1,1,1,1],[1,1,1,1],[0,1,0,1]] }, // three inset feet (1-2-1)
+    { name: "toes-a",  full: true, rows: [[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[1,0,1,0,1,0,1,0]] },
+    { name: "toes-b",  full: true, rows: [[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[0,1,0,1,0,1,0,1]] },
     { name: "dots",    rows: [[1,1,1,1],[1,1,1,1],[0,1,1,1],[1,0,1,1]] }, // detached corner pixels
     // asymmetric diagonal slants (full 8-wide, not mirrored); 2 = shallow, 3 = deep:
     { name: "2bl", full: true, rows: [[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[0,1,1,1,1,1,1,1],[0,0,1,1,1,1,1,1]] },
@@ -358,8 +380,8 @@ globalThis.Sycritters = (function () {
     const start = Math.floor(r() * PALETTE.length);
     const colors = [];                                  // analogous run -> harmonious
     for (let j = 0; j < n; j++) colors.push(PALETTE[(start + j) % PALETTE.length]);
-    const gradientDir = DIRS[Math.floor(r() * 4)];
-    const gradientMotion = MOTIONS[Math.floor(r() * 4)];
+    const gradientDir = DIRS[Math.floor(r() * DIRS.length)];
+    const gradientMotion = "static";
     const slant = (nm) => /^[23][tb][lr]$/.test(nm);
     const deep = (nm) => /^3[tb][lr]$/.test(nm);          // deep slants read lopsided -> manual-only
     const top = pick(r, TOPS.filter((m) => !deep(m.name))).name;
@@ -371,9 +393,8 @@ globalThis.Sycritters = (function () {
     // mild one-sided bite (kept off slanted bodies so asymmetry never compounds)
     const biteRoll = r(), biteSide = r() < 0.5 ? "bite-l" : "bite-r";
     if (waist === "straight" && !slant(top) && !slant(bottom) && biteRoll < 0.15) waist = biteSide;
-    // random keeps eyes clear (normal/short/tall); visors read as bars -> manual-only
-    const k = r();
-    const style = k < 0.5 ? "normal" : k < 0.78 ? "short" : "tall";
+    r(); // keep seeded RNG sequence stable while eyes are temporarily fixed.
+    const style = "normal";
     const row = 2 + (r() < 0.5 ? 0 : 1);               // 2 or 3
     const gap = r() < 0.5 ? 1 : 2;                      // px between the eyes (no 0)
     const align = (r(), "center"); // random eyes stay centered; left/right is a manual control
@@ -422,7 +443,7 @@ globalThis.Sycritters = (function () {
     if (spec.waist === "bite-l") for (const y of [3, 4]) g[y][0] = 0;
     if (spec.waist === "bite-r") for (const y of [3, 4]) g[y][7] = 0;
 
-    // frame.legShift ∈ {-1,0,1}: nudge the feet row sideways (walk cycle).
+    // frame.legShift ∈ {-1,0,1}: nudge the feet row sideways (celebrate cycle).
     if (frame && frame.legShift) {
       const s = frame.legShift, row = g[7], out = new Array(8).fill(0);
       for (let x = 0; x < 8; x++) {
@@ -445,13 +466,52 @@ globalThis.Sycritters = (function () {
     return Math.min(7 - totalW, Math.max(1, s));
   }
 
+  function eyeCellsFor(style, row, gap, align) {
+    if (style === "visor" || style === "visor2") {
+      const rows = style === "visor2" ? [row, row + 1] : [row];
+      const cells = [];
+      for (const y of rows) for (let x = 0; x < 8; x++) cells.push([x, y]);
+      return cells;
+    }
+    const w = style === "tall" ? 1 : 2;
+    const h = style === "short" ? 1 : 2;
+    const leftStart = eyeStart(2 * w + gap, align);
+    const bases = [leftStart, leftStart + w + gap];
+    const cells = [];
+    for (const bx of bases)
+      for (let ey = 0; ey < h; ey++)
+        for (let ex = 0; ex < w; ex++) cells.push([bx + ex, row + ey]);
+    return cells;
+  }
+
+  function topFrameConflict(g, spec, row, gap, align, style) {
+    const symBody = spec.waist.indexOf("bite") !== 0 &&
+      !moduleByName(TOPS, spec.top).full && !moduleByName(BOTTOMS, spec.bottom).full;
+    for (const [x, y] of eyeCellsFor(style, row, gap, align))
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++) {
+          const ny = y + dy, nx = x + dx;
+          if (ny < 0 || ny > 2) continue;
+          for (const cx of symBody ? [nx, 7 - nx] : [nx])
+            if (cx >= 0 && cx < 8 && g[ny][cx] === 0) return true;
+        }
+    return false;
+  }
+
+  function effectiveEyeRow(g, spec, gap, align, style) {
+    let row = spec.eyes.row;
+    const h = style === "short" || style === "visor" ? 1 : 2;
+    while (row + h - 1 < 7 && topFrameConflict(g, spec, row, gap, align, style)) row++;
+    return row;
+  }
+
   function stampEyes(g, spec, frame) {
     const gaze = (frame && frame.gaze) || spec.eyes.gaze || { dx: 0, dy: 0 };
     const blink = !!(frame && frame.blink);
-    const r0 = spec.eyes.row;            // top row of the eye
     const gap = spec.eyes.gap || 1;      // px between the eyes
     const align = spec.eyes.align || "center";
     const style = spec.eyes.style;
+    const r0 = effectiveEyeRow(g, spec, gap, align, style); // top row of the eye
 
     // Guarantee a 1px solid body frame: any empty cell touching an eye cell
     // (incl. the cell itself) becomes body, so eyes never touch an edge/empty.
@@ -560,22 +620,23 @@ globalThis.Sycritters = (function () {
   }
   // Linear multi-stop blend: t=0 -> colors[0], t=1 -> colors[last] (a clean ramp).
   function multiLerp(colors, t) {
+    if (colors.length === 1) return colors[0];
     t = t < 0 ? 0 : t > 1 ? 1 : t;
     const seg = t * (colors.length - 1);
     const i = Math.min(colors.length - 2, Math.floor(seg));
     return lerpHex(colors[i], colors[i + 1], seg - i);
   }
-  // Gradient body paint over 2-3 colors. `dir` lays out the blend; `motion`
+  // Gradient body paint over 1-3 selected colors. `dir` lays out the blend; `motion`
   // animates it subtly over `frame`:
   //   static = fixed · drift = slow scroll · pulse = gentle breathing
-  //   · sheen = a soft highlight band sweeps across.
+  //   · sheen = a soft highlight band sweeps across · scan-y = smooth vertical scan.
   function gradientPaint(colors, dir, motion, frame) {
     const BANDS = 5;
     const pos = (x, y) =>
-      dir === "horizontal" ? x / 7 :
-      dir === "vertical"   ? y / 7 :
-      dir === "radial"     ? Math.min(1, Math.hypot(x - 3.5, y - 3.5) / 4.95) :
-                             (x + y) / 14;
+      dir === "none"           ? 0 :
+      dir === "diagonal-left"  ? (7 - x + y) / 14 :
+      dir === "radial"         ? Math.min(1, Math.hypot(x - 3.5, y - 3.5) / 4.95) :
+                                 (x + y) / 14;
     return (x, y) => {
       let u = pos(x, y);
       if (motion === "drift") u += Math.sin(frame / 30) * 0.18;      // gentle slide
@@ -583,8 +644,15 @@ globalThis.Sycritters = (function () {
       const band = Math.round((u < 0 ? 0 : u > 1 ? 1 : u) * BANDS) / BANDS;
       let col = multiLerp(colors, band);
       if (motion === "sheen") {
-        const center = ((frame / 2) % 28) / 28; // soft highlight sweep
-        const amt = Math.max(0, 1 - Math.abs(pos(x, y) - center) * 6) * 0.4;
+        const phase = (frame / 28) % 2;
+        const center = phase <= 1 ? phase : 2 - phase; // forward then backward
+        const amt = Math.max(0, 1 - Math.abs(pos(x, y) - center) * 6) * 0.22;
+        if (amt > 0) col = lerpHex(col, "#ffffff", amt);
+      } else if (motion === "scan-y") {
+        const phase = (frame / 18) % 2;
+        const scanY = (phase <= 1 ? phase : 2 - phase) * 7;
+        const dist = Math.abs(y - scanY);
+        const amt = Math.max(0, 1 - dist / 1.35) * 0.28;
         if (amt > 0) col = lerpHex(col, "#ffffff", amt);
       }
       return col;
@@ -648,7 +716,7 @@ globalThis.Sycritters = (function () {
           bi = idx(p[6], BOTTOMS), wi = idx(p[7], WAISTS), si = idx(p[8], EYE_STYLES),
           ai = idx(p[11], ALIGNS);
     const row = +p[9], gap = +p[10], gz = +p[12];
-    if (colors.length < 2 || colors.length !== p[2].length) return null;
+    if (colors.length < 1 || colors.length !== p[2].length) return null;
     if ([di, mi, ti, bi, wi, si, ai].includes(-1)) return null;
     if (![2, 3].includes(row) || ![1, 2].includes(gap) || !(gz >= 0 && gz <= 8)) return null;
     const pi = v2 ? idx(p[13], PUPILS) : 0;
@@ -659,7 +727,7 @@ globalThis.Sycritters = (function () {
       seed,
       colors,
       gradientDir: DIRS[di],
-      gradientMotion: MOTIONS[mi],
+      gradientMotion: "static",
       top: TOPS[ti].name,
       bottom: BOTTOMS[bi].name,
       waist: WAISTS[wi],
@@ -719,7 +787,7 @@ globalThis.Sycritters = (function () {
   const els = {
     editor: $("editor"), seed: $("seed"), seedReadout: $("seedReadout"),
     rand: $("rand"), surprise: $("surprise"),
-    palette: $("palette"), colorCount: $("colorCount"), gradDir: $("gradDir"), gradMotion: $("gradMotion"),
+    palette: $("palette"), colorCount: $("colorCount"), gradDir: $("gradDir"),
     tops: $("tops"), bottoms: $("bottoms"), waist: $("waist"),
     eyeStyle: $("eyeStyle"), eyePupil: $("eyePupil"), eyeMirror: $("eyeMirror"),
     eyeGap: $("eyeGap"), eyeAlign: $("eyeAlign"), bodyAnim: $("bodyAnim"),
@@ -736,7 +804,11 @@ globalThis.Sycritters = (function () {
     return (m && specFromString(m[1])) || null;
   }
 
-  let current = specFromURL() || S.generate("sycritter");
+  function force2x2Eyes(spec) {
+    return { ...spec, eyes: { ...spec.eyes, style: "normal" } };
+  }
+
+  let current = force2x2Eyes(specFromURL() || S.generate("sycritter"));
   let bodyAnimMode = "none";
   let lastFrame = -1;
   let wallTiles = [];
@@ -747,15 +819,22 @@ globalThis.Sycritters = (function () {
 
   // lock-an-axis: overrides mutate one axis, leaving the rest intact.
   function override(patch) { current = { ...current, ...patch }; }
-  function setSeedAndRegen(seed) { current = S.generate(seed); }
+  function setSeedAndRegen(seed) { current = force2x2Eyes(S.generate(seed)); }
+  function isPristineSpec(spec) {
+    return JSON.stringify(spec) === JSON.stringify(S.generate(spec.seed));
+  }
+  function seedFieldValue(spec) {
+    return isPristineSpec(spec) ? spec.seed : specToString(spec);
+  }
 
   // render() now only reflects state into the controls; the animation loop
   // owns drawing the editor critter every frame from `current`.
   function render() {
-    els.seed.value = current.seed;
+    current = force2x2Eyes(current);
+    els.seed.value = seedFieldValue(current);
     // honest seed plate: flag when overrides mean the seed alone won't
     // reproduce this critter (the URL still will)
-    const pristine = JSON.stringify(current) === JSON.stringify(S.generate(current.seed));
+    const pristine = isPristineSpec(current);
     els.seedReadout.textContent = current.seed + (pristine ? "" : " · edited");
     try { history.replaceState(null, "", "?c=" + specToString(current)); } catch {}
     syncControls();
@@ -763,15 +842,21 @@ globalThis.Sycritters = (function () {
   }
 
   /* ---- animation -------------------------------------------------------- */
-  const EDITOR_PAD = 2; // cells of margin around the critter (headroom for jumps)
+  const EDITOR_PAD = 2; // cells of margin around the critter (headroom for attention motion)
 
-  // All motion is quantized to 12fps integer frames -> pixel-art stepped.
+  // Most motion is quantized to 12fps integer frames -> pixel-art stepped.
+  // Processing and scanning use fractional frames so their highlights feel smooth.
   const FPS = 12;
 
   const hexes = (spec) => spec.colors.map((c) => c.hex);
   // Body paint for a spec at a frame: a moving multi-color gradient.
   function paintFor(spec, frame) {
-    return gradientPaint(hexes(spec), spec.gradientDir, spec.gradientMotion || "drift", frame);
+    const motion =
+      bodyAnimMode === "thinking" ? "pulse" :
+      bodyAnimMode === "scanning" ? "scan-y" :
+      bodyAnimMode === "processing" ? "sheen" :
+      "static";
+    return gradientPaint(hexes(spec), spec.gradientDir, motion, frame);
   }
   // Resting (static) paint for wall tiles + exports.
   function restPaint(spec) {
@@ -784,40 +869,54 @@ globalThis.Sycritters = (function () {
       { dx: 1, dy: 0 }, { dx: 0, dy: 0 }, { dx: -1, dy: 0 }, { dx: 0, dy: -1 },
       { dx: 1, dy: 1 }, { dx: 0, dy: 0 }, { dx: -1, dy: 1 }, { dx: 0, dy: 0 },
     ];
-    const gaze = dirs[Math.floor(frame / 11) % dirs.length];
-    const blink = frame % 48 < 2; // ~2 frames every 4s
+    const gaze = dirs[Math.floor(frame / 22) % dirs.length];
+    const blink = frame % 96 < 2; // ~2 frames every 8s
     return { gaze, blink };
+  }
+  function stateEyeFrame(frame) {
+    if (bodyAnimMode === "thinking") {
+      const dirs = [{ dx: 0, dy: -1 }, { dx: 1, dy: -1 }, { dx: 0, dy: 0 }, { dx: -1, dy: -1 }];
+      return { gaze: dirs[Math.floor(frame / 18) % dirs.length], blink: frame % 120 < 2 };
+    }
+    if (bodyAnimMode === "scanning") {
+      return { gaze: { dx: 0, dy: 0 }, blink: false };
+    }
+    if (bodyAnimMode === "processing") {
+      const dirs = [{ dx: -1, dy: 1 }, { dx: 0, dy: 0 }, { dx: 1, dy: 1 }, { dx: 0, dy: 0 }];
+      return { gaze: dirs[Math.floor(frame / 14) % dirs.length], blink: frame % 84 < 1 };
+    }
+    return null;
   }
 
   // Body motion in whole-pixel steps (pixel-art), keyed to the frame counter.
+  const walkFrame = (frame) => Math.floor(frame / 2);
   function bodyTransform(frame) {
     if (bodyAnimMode === "bob") {
       const seq = [0, 0, -1, -1];
       return { dx: 0, dy: seq[frame % seq.length], squashY: 1 };
     }
-    if (bodyAnimMode === "jump") {
+    if (bodyAnimMode === "jump") { // visible label: wants attention
       const dyS = [0, -1, -2, -2, -1, 0, 0, 0, 0, 0, 0, 0];
       const sqS = [1, 1, 1, 1, 1, 0.88, 1, 1, 1, 1, 1, 1];
       const i = frame % dyS.length;
       return { dx: 0, dy: dyS[i], squashY: sqS[i] };
     }
-    if (bodyAnimMode === "walk") {
+    if (bodyAnimMode === "walk") { // visible label: celebrate
       const dxS = [0, 1, 1, 0, -1, -1], dyS = [0, -1, 0, 0, -1, 0];
-      const i = frame % dxS.length;
+      const i = walkFrame(frame) % dxS.length;
       return { dx: dxS[i], dy: dyS[i], squashY: 1 };
     }
     return { dx: 0, dy: 0, squashY: 1 };
   }
 
-  // Feet counter the walk sway so the legs read as stepping, not sliding.
+  // Feet counter the celebrate sway so the legs read as stepping, not sliding.
   const WALK_LEGS = [0, -1, -1, 0, 1, 1];
 
   const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
   if (reducedMotion.addEventListener) reducedMotion.addEventListener("change", () => { lastFrame = -1; });
 
   function editorAnimated() {
-    return !reducedMotion.matches &&
-      (els.animEyes.checked || bodyAnimMode !== "none" || (current.gradientMotion || "static") !== "static");
+    return !reducedMotion.matches && (els.animEyes.checked || bodyAnimMode !== "none");
   }
 
   // Everything the editor (and the sprite sheet) needs for one frame.
@@ -825,8 +924,10 @@ globalThis.Sycritters = (function () {
     const f = { gaze: current.eyes.gaze || { dx: 0, dy: 0 }, blink: false };
     let paint = restPaint(current), transform = null;
     if (!reducedMotion.matches) {
-      if (els.animEyes.checked) { const e = eyeFrame(frame); f.gaze = e.gaze; f.blink = e.blink; }
-      if (bodyAnimMode === "walk") f.legShift = WALK_LEGS[frame % WALK_LEGS.length];
+      const stateEyes = stateEyeFrame(frame);
+      if (stateEyes) { f.gaze = stateEyes.gaze; f.blink = stateEyes.blink; }
+      else if (els.animEyes.checked) { const e = eyeFrame(frame); f.gaze = e.gaze; f.blink = e.blink; }
+      if (bodyAnimMode === "walk") f.legShift = WALK_LEGS[walkFrame(frame) % WALK_LEGS.length];
       paint = paintFor(current, frame);
       transform = bodyTransform(frame);
     }
@@ -838,20 +939,13 @@ globalThis.Sycritters = (function () {
     drawCanvas(els.editor, c.grid, c.paint, EDITOR_SCALE, c.transform, EDITOR_PAD);
   }
 
-  // Animate only the wall tiles whose gradient actually moves (eyes rest).
-  function drawWall(frame) {
-    for (const t of wallTiles) {
-      if ((t.spec.gradientMotion || "static") === "static") continue;
-      drawCanvas(t.canvas, t.grid, paintFor(t.spec, frame), 16);
-    }
-  }
-
   function loop(t) {
-    const frame = Math.floor(t / (1000 / FPS));
-    if (frame !== lastFrame) {
+    const rawFrame = t / (1000 / FPS);
+    const smoothState = bodyAnimMode === "processing" || bodyAnimMode === "scanning";
+    const frame = smoothState ? rawFrame : Math.floor(rawFrame);
+    if (smoothState || frame !== lastFrame) {
       // skip redraws when nothing animates (lastFrame -1 forces one draw)
       if (lastFrame === -1 || editorAnimated()) draw(frame);
-      if (!reducedMotion.matches) drawWall(frame);
       lastFrame = frame;
     }
     requestAnimationFrame(loop);
@@ -884,41 +978,89 @@ globalThis.Sycritters = (function () {
   function setPrimaryColor(c) { override({ colors: runFrom(idxOf(c), current.colors.length) }); }
   function setColorCount(n) { override({ colors: runFrom(idxOf(current.colors[0]), n) }); }
 
+  function previewRows(m) {
+    if (m.full) return m.rows;
+    return m.rows.map((r) => [r[0], r[1], r[2], r[3], r[3], r[2], r[1], r[0]]);
+  }
+  function previewBits(kind, value) {
+    const bits = Array.from({ length: 8 }, () => new Array(8).fill(0));
+    if (kind === "top") {
+      const rows = previewRows(S.TOPS.find((m) => m.name === value) || S.TOPS[0]);
+      for (let y = 0; y < 4; y++) for (let x = 0; x < 8; x++) bits[y][x] = rows[y][x];
+    } else if (kind === "bottom") {
+      const rows = previewRows(S.BOTTOMS.find((m) => m.name === value) || S.BOTTOMS[0]);
+      for (let y = 0; y < 4; y++) for (let x = 0; x < 8; x++) bits[y + 4][x] = rows[y][x];
+    } else if (kind === "waist") {
+      for (const y of [3, 4]) for (let x = 0; x < 8; x++) bits[y][x] = 1;
+      if (value === "pinch" || value === "narrow") for (const y of [3, 4]) { bits[y][0] = 0; bits[y][7] = 0; }
+      if (value === "narrow") for (const y of [3, 4]) { bits[y][1] = 0; bits[y][6] = 0; }
+      if (value === "bite-l") for (const y of [3, 4]) bits[y][0] = 0;
+      if (value === "bite-r") for (const y of [3, 4]) bits[y][7] = 0;
+    }
+    return bits;
+  }
+  function addPreview(button, kind, value, label) {
+    const mini = document.createElement("span");
+    mini.className = "mini8";
+    mini.setAttribute("aria-hidden", "true");
+    for (const row of previewBits(kind, value))
+      for (const cell of row) {
+        const px = document.createElement("i");
+        if (cell) px.className = "on";
+        mini.appendChild(px);
+      }
+    const text = document.createElement("span");
+    text.className = "seg__text";
+    text.textContent = label;
+    button.append(mini, text);
+  }
+
   function buildSeg(container, values, onPick, withRandom) {
     container.innerHTML = "";
-    for (const v of values) {
+    for (const item of values) {
+      const opt = typeof item === "string" ? { value: item, label: item } : item;
       const b = document.createElement("button");
-      b.textContent = v; b.dataset.value = v;
-      b.addEventListener("click", () => { onPick(v); render(); });
+      b.dataset.value = opt.value;
+      if (opt.preview) addPreview(b, opt.preview, opt.value, opt.label);
+      else b.textContent = opt.label;
+      b.addEventListener("click", () => { onPick(opt.value); render(); });
       container.appendChild(b);
     }
     if (withRandom) {
       const b = document.createElement("button");
       b.textContent = "🎲"; b.dataset.value = "__rand"; b.title = "randomize";
       b.addEventListener("click", () => {
-        onPick(values[Math.floor(Math.random() * values.length)]); render();
+        const item = values[Math.floor(Math.random() * values.length)];
+        onPick(typeof item === "string" ? item : item.value); render();
       });
       container.appendChild(b);
     }
   }
 
   function buildSegs() {
-    buildSeg(els.colorCount, ["2", "3", "4"], (v) => setColorCount(Number(v)), false);
-    buildSeg(els.gradDir, ["diagonal", "horizontal", "vertical", "radial"], (v) => override({ gradientDir: v }), false);
-    buildSeg(els.gradMotion, ["static", "drift", "pulse", "sheen"], (v) => override({ gradientMotion: v }), false);
-    buildSeg(els.tops, S.TOPS.map((m) => m.name), (v) => override({ top: v }), true);
-    buildSeg(els.bottoms, S.BOTTOMS.map((m) => m.name), (v) => override({ bottom: v }), true);
-    buildSeg(els.waist, ["straight", "pinch", "narrow", "bite-l", "bite-r"], (v) => override({ waist: v }), false);
-    buildSeg(els.eyeStyle, ["normal", "short", "tall", "visor", "visor2"], (v) => override({ eyes: { ...current.eyes, style: v } }), false);
+    buildSeg(els.colorCount, ["1", "2", "3"], (v) => setColorCount(Number(v)), false);
+    buildSeg(els.gradDir, [
+      { value: "none", label: "None" },
+      { value: "diagonal-left", label: "Diagonal left" },
+      { value: "diagonal-right", label: "Diagonal right" },
+      { value: "radial", label: "Radial" },
+    ], (v) => override({ gradientDir: v, gradientMotion: "static" }), false);
+    buildSeg(els.tops, S.TOPS.map((m) => ({ value: m.name, label: m.name, preview: "top" })), (v) => override({ top: v }), true);
+    buildSeg(els.waist, ["straight", "pinch", "narrow", "bite-l", "bite-r"].map((v) => ({ value: v, label: v, preview: "waist" })), (v) => override({ waist: v }), false);
+    buildSeg(els.bottoms, S.BOTTOMS.map((m) => ({ value: m.name, label: m.name, preview: "bottom" })), (v) => override({ bottom: v }), true);
+    buildSeg(els.eyeStyle, ["normal"], (v) => override({ eyes: { ...current.eyes, style: v } }), false);
     buildSeg(els.eyePupil, ["dot", "bar"], (v) => override({ eyes: { ...current.eyes, pupil: v } }), false);
     buildSeg(els.eyeMirror, ["parallel", "mirrored"], (v) => override({ eyes: { ...current.eyes, mirror: v === "mirrored" } }), false);
     buildSeg(els.eyeGap, ["1", "2"], (v) => override({ eyes: { ...current.eyes, gap: Number(v) } }), false);
     buildSeg(els.eyeAlign, ["left", "center", "right"], (v) => override({ eyes: { ...current.eyes, align: v } }), false);
-    buildSeg(els.bodyAnim, ["none", "bob", "jump", "walk"], (v) => { bodyAnimMode = v; }, false);
+    buildSeg(els.bodyAnim, [
+      "none", "thinking", "scanning", "processing", "bob",
+      { value: "jump", label: "wants attention" },
+      { value: "walk", label: "celebrate" },
+    ], (v) => { bodyAnimMode = v; }, false);
     // mark the options random generation deliberately skips
     markSpice(els.tops, ["3tl", "3tr"]);
     markSpice(els.bottoms, ["3bl", "3br"]);
-    markSpice(els.eyeStyle, ["visor", "visor2"]);
     markSpice(els.eyeAlign, ["left", "right"]);
   }
 
@@ -937,7 +1079,6 @@ globalThis.Sycritters = (function () {
     setPressed(els.palette, (b) => current.colors.some((c) => c.name === b.dataset.name));
     setPressed(els.colorCount, (b) => b.dataset.value === String(current.colors.length));
     setPressed(els.gradDir, (b) => b.dataset.value === current.gradientDir);
-    setPressed(els.gradMotion, (b) => b.dataset.value === (current.gradientMotion || "drift"));
     setPressed(els.tops, (b) => b.dataset.value === current.top);
     setPressed(els.bottoms, (b) => b.dataset.value === current.bottom);
     setPressed(els.waist, (b) => b.dataset.value === current.waist);
@@ -953,7 +1094,7 @@ globalThis.Sycritters = (function () {
   function generateWall(n) {
     els.grid.innerHTML = "";
     wallTiles = [];
-    for (let i = 0; i < (n || 28); i++) {
+    for (let i = 0; i < (n || 30); i++) {
       const seed = newSeed();
       const spec = S.generate(seed);
       const grid = S.rasterize(spec);
@@ -971,7 +1112,7 @@ globalThis.Sycritters = (function () {
 
   /* export */
   // Export what you see: the gradient at its current animation frame
-  // (resting eyes/body so a blink or mid-jump can't spoil the file).
+  // (resting eyes/body so a blink or mid-state frame can't spoil the file).
   function livePaint() {
     if (reducedMotion.matches) return restPaint(current);
     return paintFor(current, Math.max(0, lastFrame));
@@ -990,8 +1131,7 @@ globalThis.Sycritters = (function () {
     a.href = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
     a.click();
   }
-  // 12-frame horizontal sprite strip: body motion + gradient cycle, resting
-  // eyes (the eye cycle is 88 frames long and wouldn't loop in 12).
+  // 12-frame horizontal sprite strip: body state + color state, resting eyes.
   function buildSheetCanvas(scale, frames) {
     const pad = 2, cell = (8 + 2 * pad) * scale;
     const sheet = document.createElement("canvas");
@@ -1001,7 +1141,7 @@ globalThis.Sycritters = (function () {
     const tmp = document.createElement("canvas");
     for (let f = 0; f < frames; f++) {
       const fr = { gaze: current.eyes.gaze || { dx: 0, dy: 0 }, blink: false };
-      if (bodyAnimMode === "walk") fr.legShift = WALK_LEGS[f % WALK_LEGS.length];
+      if (bodyAnimMode === "walk") fr.legShift = WALK_LEGS[walkFrame(f) % WALK_LEGS.length];
       drawCanvas(tmp, S.rasterize(current, fr), paintFor(current, f), scale, bodyTransform(f), pad);
       ctx.drawImage(tmp, f * cell, 0);
     }
@@ -1021,18 +1161,20 @@ globalThis.Sycritters = (function () {
   }
 
   /* wiring */
-  els.seed.addEventListener("change", (e) => { setSeedAndRegen(e.target.value.trim() || newSeed()); render(); });
+  els.seed.addEventListener("change", (e) => {
+    const value = e.target.value.trim();
+    current = force2x2Eyes(specFromString(value) || S.generate(value || newSeed()));
+    render();
+  });
   els.rand.addEventListener("click", () => { setSeedAndRegen(newSeed()); render(); });
   // Surprise me has personality: unlike 🎲 it sometimes dips into the
-  // manual-only spice (visors, deep slants, off-center eyes).
+  // manual-only spice (deep slants, off-center eyes).
   els.surprise.addEventListener("click", () => {
     const spec = S.generate(newSeed());
     const mut = { ...spec, eyes: { ...spec.eyes } };
     const isSlant = (nm) => /^[23][tb][lr]$/.test(nm);
     const roll = Math.random();
-    if (roll < 0.2) {
-      mut.eyes.style = Math.random() < 0.5 ? "visor" : "visor2";
-    } else if (roll < 0.4) {
+    if (roll < 0.4) {
       if (Math.random() < 0.5) {
         mut.top = Math.random() < 0.5 ? "3tl" : "3tr";
         if (isSlant(mut.bottom)) mut.bottom = "flat";
@@ -1055,6 +1197,7 @@ globalThis.Sycritters = (function () {
 
   buildSwatches();
   buildSegs();
+  generateWall();
   render();
   requestAnimationFrame(loop);
 

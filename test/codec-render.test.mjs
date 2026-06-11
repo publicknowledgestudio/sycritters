@@ -24,9 +24,28 @@ test("specFromString rejects garbage", () => {
 });
 
 test("gradientPaint static endpoints hit the run's end colors", () => {
-  const p = S.gradientPaint(["#29abe2", "#2be89c"], "diagonal", "static", 0);
+  const p = S.gradientPaint(["#29abe2", "#2be89c"], "diagonal-right", "static", 0);
   assert.equal(p(0, 0), "#29abe2");
   assert.equal(p(7, 7), "#2be89c");
+});
+
+test("gradientPaint supports a single flat color", () => {
+  const p = S.gradientPaint(["#29abe2"], "radial", "static", 0);
+  assert.equal(p(0, 0), "#29abe2");
+  assert.equal(p(7, 7), "#29abe2");
+});
+
+test("spec codec roundtrips a one-color edited spec", () => {
+  const spec = { ...S.generate("one-color"), colors: [S.PALETTE[0]] };
+  assert.equal(JSON.stringify(S.specFromString(S.specToString(spec))), JSON.stringify(spec));
+});
+
+test("legacy horizontal and vertical directions decode to supported behaviors", () => {
+  const legacyHorizontal = "2~x~01~1~2~0~0~0~0~3~1~1~4~0~0";
+  const legacyVertical = "2~x~01~2~3~0~0~0~0~3~1~1~4~0~0";
+  assert.equal(S.specFromString(legacyHorizontal).gradientDir, "diagonal-left");
+  assert.equal(S.specFromString(legacyVertical).gradientDir, "diagonal-right");
+  assert.equal(S.specFromString(legacyHorizontal).gradientMotion, "static");
 });
 
 test("toSVG emits eye-white and pupil rects", () => {

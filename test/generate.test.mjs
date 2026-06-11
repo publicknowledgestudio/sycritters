@@ -14,17 +14,17 @@ test("generate produces a spec with valid axes", () => {
   assert.ok(S.TOPS.some(m => m.name === spec.top));
   assert.ok(S.BOTTOMS.some(m => m.name === spec.bottom));
   assert.ok(["straight", "pinch", "narrow", "bite-l", "bite-r"].includes(spec.waist));
-  assert.ok(["normal", "tall", "visor", "visor2", "short"].includes(spec.eyes.style));
+  assert.equal(spec.eyes.style, "normal");
   assert.ok(["dot", "bar"].includes(spec.eyes.pupil));
   assert.equal(typeof spec.eyes.mirror, "boolean");
   assert.ok([1, 2].includes(spec.eyes.gap));
   assert.ok(["left", "center", "right"].includes(spec.eyes.align));
   assert.ok(spec.eyes.row >= 2 && spec.eyes.row <= 3);
-  // all critters are gradients of 2-4 palette colors
-  assert.ok(Array.isArray(spec.colors) && spec.colors.length >= 2 && spec.colors.length <= 4);
+  // all generated critters use 1-3 palette colors
+  assert.ok(Array.isArray(spec.colors) && spec.colors.length >= 1 && spec.colors.length <= 3);
   for (const c of spec.colors) assert.ok(S.PALETTE.some(p => p.hex === c.hex), "color from palette");
-  assert.ok(["diagonal", "horizontal", "vertical", "radial"].includes(spec.gradientDir));
-  assert.ok(["static", "drift", "pulse", "sheen"].includes(spec.gradientMotion));
+  assert.ok(["none", "diagonal-left", "diagonal-right", "radial"].includes(spec.gradientDir));
+  assert.equal(spec.gradientMotion, "static");
 });
 
 test("gradient colors are an analogous run (consecutive on the palette ring)", () => {
