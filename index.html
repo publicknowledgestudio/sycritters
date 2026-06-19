@@ -171,12 +171,15 @@
 
   /* ---- video cast ---- */
   .cast { margin-top: 44px; }
-  .cast__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
+  .cast__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 14px; }
   .cast__member {
-    position: relative; display: flex; flex-direction: column; gap: 6px;
-    background: var(--surface); border: 1px solid var(--border); padding: 10px;
+    position: relative; display: flex; flex-direction: column; gap: 8px;
+    background: var(--surface); border: 1px solid var(--border); padding: 14px;
   }
-  .cast__member canvas { display: block; width: 100%; height: auto; image-rendering: pixelated; cursor: pointer; }
+  .cast__member canvas {
+    display: block; width: 100%; height: auto; image-rendering: pixelated; cursor: pointer;
+    background: #fafaf8;
+  }
   .cast__name {
     font-size: 11px; color: var(--text); letter-spacing: .5px;
     text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -188,7 +191,7 @@
     border: 1px solid transparent; padding: 2px 5px; cursor: pointer;
   }
   .cast__remove:hover { color: var(--accent); border-color: var(--border); }
-  .cast__row { display: flex; flex-wrap: wrap; gap: 4px; }
+  .cast__row { display: flex; flex-wrap: wrap; gap: 6px; }
   .cast__row .cast__dl { flex: 1; }
   .cast__cycle {
     flex-basis: 100%; min-width: 0; font-family: var(--mono); font-size: 11px;
@@ -898,13 +901,14 @@ globalThis.Sycritters = (function () {
   }
 
   function force2x2Eyes(spec) {
-    return { ...spec, eyes: { ...spec.eyes, style: "normal" } };
+    return { ...spec, eyes: { ...spec.eyes, style: "normal", pupil: "bar" } };
   }
 
   let current = force2x2Eyes(specFromURL() || S.generate("sycritter"));
   let bodyAnimMode = "none";
   let lastFrame = -1;
   let wallTiles = [];
+  let castPreviewTiles = [];
 
   function newSeed() {
     return Math.floor(Math.random() * 0x100000000).toString(36);
@@ -1033,13 +1037,25 @@ globalThis.Sycritters = (function () {
     drawCanvas(els.editor, c.grid, c.paint, EDITOR_SCALE, c.transform, EDITOR_PAD);
   }
 
+  function drawCastPreviewTile(tile, frame) {
+    const n = CAST_CYCLES[tile.sel.value] || 1;
+    const f = castFrame(tile.spec, tile.sel.value, frame % n, n);
+    drawCanvas(tile.canvas, f.grid, f.paint, 12, f.transform, 4);
+  }
+
+  function drawCastPreviews(frame) {
+    for (const tile of castPreviewTiles) drawCastPreviewTile(tile, frame);
+  }
+
   function loop(t) {
     const rawFrame = t / (1000 / FPS);
     const smoothState = bodyAnimMode === "processing" || bodyAnimMode === "scanning";
     const frame = smoothState ? rawFrame : Math.floor(rawFrame);
+    const castFrameIndex = Math.floor(rawFrame);
     if (smoothState || frame !== lastFrame) {
       // skip redraws when nothing animates (lastFrame -1 forces one draw)
       if (lastFrame === -1 || editorAnimated()) draw(frame);
+      if (!reducedMotion.matches) drawCastPreviews(castFrameIndex);
       lastFrame = frame;
     }
     requestAnimationFrame(loop);
@@ -1143,7 +1159,7 @@ globalThis.Sycritters = (function () {
     buildSeg(els.waist, ["straight", "pinch", "narrow", "bite-l", "bite-r"].map((v) => ({ value: v, label: v, preview: "waist" })), (v) => override({ waist: v }), false);
     buildSeg(els.bottoms, S.BOTTOMS.map((m) => ({ value: m.name, label: m.name, preview: "bottom" })), (v) => override({ bottom: v }), true);
     buildSeg(els.eyeStyle, ["normal"], (v) => override({ eyes: { ...current.eyes, style: v } }), false);
-    buildSeg(els.eyePupil, ["dot", "bar"], (v) => override({ eyes: { ...current.eyes, pupil: v } }), false);
+    buildSeg(els.eyePupil, ["bar"], (v) => override({ eyes: { ...current.eyes, pupil: v } }), false);
     buildSeg(els.eyeMirror, ["parallel", "mirrored"], (v) => override({ eyes: { ...current.eyes, mirror: v === "mirrored" } }), false);
     buildSeg(els.eyeGap, ["1", "2"], (v) => override({ eyes: { ...current.eyes, gap: Number(v) } }), false);
     buildSeg(els.eyeAlign, ["left", "center", "right"], (v) => override({ eyes: { ...current.eyes, align: v } }), false);
@@ -1307,6 +1323,7 @@ globalThis.Sycritters = (function () {
 
   function renderCast() {
     const cast = loadCast();
+    castPreviewTiles = [];
     castGrid.innerHTML = "";
     if (!cast.length) {
       const empty = document.createElement("div");
@@ -1316,16 +1333,15 @@ globalThis.Sycritters = (function () {
       return;
     }
     cast.forEach((m, i) => {
-      const spec = specFromString(m.code);
+      const spec = force2x2Eyes(specFromString(m.code));
       const tile = document.createElement("div");
       tile.className = "cast__member";
       const c = document.createElement("canvas");
-      drawCanvas(c, S.rasterize(spec), restPaint(spec), 16);
       c.title = "load " + m.name + " into the editor";
       c.setAttribute("role", "img");
       c.setAttribute("aria-label", m.name);
       c.addEventListener("click", () => {
-        current = spec;
+        current = force2x2Eyes(spec);
         render();
         document.querySelector(".stage").scrollIntoView({ behavior: "smooth", block: "start" });
       });
@@ -1351,6 +1367,8 @@ globalThis.Sycritters = (function () {
         o.value = cyc; o.textContent = cyc;
         sel.appendChild(o);
       }
+      const previewTile = { spec, sel, canvas: c };
+      sel.addEventListener("change", () => drawCastPreviewTile(previewTile, 0));
       const dl = document.createElement("button");
       dl.className = "btn cast__dl"; dl.textContent = "⤓ seq";
       dl.title = "download the selected cycle as numbered PNG frames (alpha)";
@@ -1364,6 +1382,8 @@ globalThis.Sycritters = (function () {
       row.appendChild(sel); row.appendChild(dl); row.appendChild(vid);
       tile.appendChild(rm); tile.appendChild(c); tile.appendChild(label); tile.appendChild(row);
       castGrid.appendChild(tile);
+      castPreviewTiles.push(previewTile);
+      drawCastPreviewTile(previewTile, 0);
     });
   }
 
@@ -1373,12 +1393,46 @@ globalThis.Sycritters = (function () {
   const CAST_CYCLES = {
     jump: 12, walk: 6, bob: 4, blink: 12, pulse: 24, sheen: 24, scan: 24,
     // prototype motions
-    shake: 8, nod: 8, dance: 8, look: 12, sleep: 12,
+    shake: 8, nod: 8, dance: 8, look: 12, sleep: 12, turnaround: 24, "side-step": 16, "orbit-glance": 16,
+    // combos sequence existing cycles back-to-back for production exports
+    greeting: 32, "idle-life": 56,
+  };
+  const CAST_COMBOS = {
+    greeting: ["look", "nod", "jump"],
+    "idle-life": ["bob", "bob", "bob", "bob", "blink", "look", "blink", "bob"],
   };
 
   function castFrame(spec, cycle, i, n) {
+    const combo = CAST_COMBOS[cycle];
+    if (combo) {
+      let cursor = 0;
+      for (const part of combo) {
+        const len = CAST_CYCLES[part];
+        if (i < cursor + len) return castFrame(spec, part, i - cursor, len);
+        cursor += len;
+      }
+      const fallback = combo[combo.length - 1];
+      return castFrame(spec, fallback, CAST_CYCLES[fallback] - 1, CAST_CYCLES[fallback]);
+    }
     const fr = { gaze: spec.eyes.gaze || { dx: 0, dy: 0 }, blink: false };
     let transform = null, paint = restPaint(spec);
+    const edgePaint = (turn) => {
+      const basePaint = restPaint(spec);
+      const mix = (hex, target, amt) => {
+        const rgb = (h) => [1, 3, 5].map((p) => parseInt(h.slice(p, p + 2), 16));
+        const a = rgb(hex), b = rgb(target);
+        return "#" + a.map((v, idx) => {
+          const n = Math.round(v + (b[idx] - v) * amt);
+          return ("0" + n.toString(16)).slice(-2);
+        }).join("");
+      };
+      return (x, y) => {
+        let col = basePaint(x, y);
+        if ((turn < 0 && x === 0) || (turn > 0 && x === 7)) col = mix(col, "#ffffff", 0.28);
+        if ((turn < 0 && x === 7) || (turn > 0 && x === 0)) col = mix(col, "#000000", 0.24);
+        return col;
+      };
+    };
     if (cycle === "jump") {
       const dyS = [0, -1, -2, -2, -1, 0, 0, 0, 0, 0, 0, 0];
       const sqS = [1, 1, 1, 1, 1, 0.88, 1, 1, 1, 1, 1, 1];
@@ -1420,6 +1474,27 @@ globalThis.Sycritters = (function () {
       // lids shut, slow breathing squash
       fr.blink = 2;
       transform = { dx: 0, dy: 0, squashY: [1, 1, 1, 0.94, 0.94, 0.94, 0.94, 0.94, 0.94, 1, 1, 1][i] };
+    } else if (cycle === "turnaround") {
+      // fake a 3D head turn: body slides, eyes track, and the near edge catches light.
+      const turns = [-1,-1,-1,-1,-1,-1, 0,0,0,0, 1,1,1,1,1,1, 0,0,0,0,0,0,0,0];
+      const turn = turns[i];
+      transform = { dx: turn, dy: [0,0,0,-1,-1,0,0,0,0,0,0,0,0,-1,-1,0,0,0,0,0,0,0,0,0][i], squashY: 1 };
+      fr.gaze = { dx: turn, dy: 0 };
+      if (turn) paint = edgePaint(turn);
+    } else if (cycle === "side-step") {
+      // travel sideways and back; feet counter-shift so it reads as stepping through space.
+      const dxS = [0,1,2,2,3,3,2,1,0,-1,-2,-2,-3,-3,-2,-1];
+      const dyS = [0,0,-1,0,0,-1,0,0,0,0,-1,0,0,-1,0,0];
+      transform = { dx: dxS[i], dy: dyS[i], squashY: 1 };
+      fr.gaze = { dx: dxS[i] > 0 ? 1 : dxS[i] < 0 ? -1 : 0, dy: 0 };
+      fr.legShift = [-1,-1,0,1,1,0,-1,-1,1,1,0,-1,-1,0,1,1][i];
+    } else if (cycle === "orbit-glance") {
+      // eyes orbit one way while the body sways the other, suggesting a tiny face turn.
+      const gazeX = [-1,-1,0,1,1,1,0,-1,-1,-1,0,1,1,0,-1,-1][i];
+      const gazeY = [0,-1,-1,-1,0,1,1,1,0,-1,-1,0,1,1,1,0][i];
+      transform = { dx: -gazeX, dy: gazeY > 0 ? 1 : 0, squashY: 1 };
+      fr.gaze = { dx: gazeX, dy: gazeY };
+      if (gazeX) paint = edgePaint(-gazeX);
     }
     return { grid: S.rasterize(spec, fr), paint, transform };
   }
@@ -1553,6 +1628,7 @@ const S = globalThis.Sycritters;
 const { gradientPaint, cellFill, specFromString } = S;
 const WALK_LEGS = ${JSON.stringify(WALK_LEGS)};
 const CAST_CYCLES = ${JSON.stringify(CAST_CYCLES)};
+const CAST_COMBOS = ${JSON.stringify(CAST_COMBOS)};
 const hexes = ${safe(hexes.toString())};
 ${safe(helpers)}
 const CAST = ${safe(JSON.stringify(loadCast()))};
