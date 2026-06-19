@@ -22,10 +22,14 @@ Just open `index.html` in a browser. No build, no server, no dependencies.
   gaze (parallel or **mirrored**, pupils pointing inward/outward together), a 1
   or 2 px gap, and alignment. Touching one control changes only that axis
   (lock-an-axis).
-- **Animate it.** Agent states include thinking, scanning, processing, bob, wants
-  attention, and celebrate. Body and eye states use stepped pixel-art timing;
+- **Animate it.** A single unified motion table drives both the live **Motion**
+  control and the export cycles, so they can never drift apart. Beyond the agent
+  states (thinking / scanning / processing / bob / wants attention / celebrate)
+  it includes **push wall** (lean into a wall in any of four directions, with
+  eased A⇄B transitions), **pull heavy**, **study**, **float yoga**, **wiggle**,
+  **sad**, and **excited**. Body and eye states use stepped pixel-art timing;
   scanning and processing use smoother highlight sweeps for a more product-ready
-  agent feel.
+  agent feel. A size-adjustable **mini preview** shows the critter scaled down.
 - **Share it.** The URL always encodes the exact critter on screen — including
   manual edits — so copying the address (or the **Link** button) is a permalink.
   The seed field switches to the full share code after edits, and accepts that
@@ -35,6 +39,17 @@ Just open `index.html` in a browser. No build, no server, no dependencies.
 - **Export.** Download the critter as a crisp **PNG** or scalable **SVG**
   (captured at the gradient's current frame), or a 12-frame **sprite sheet**
   of its motion cycle.
+- **Video cast.** Name and save critters into a cast (persisted to
+  `localStorage`); each cast card animates its selected cycle live. Export any
+  cycle per member as a transparent **PNG / SVG sequence**, a transparent
+  **WebM** or QuickTime **MOV** (`png ` codec, After-Effects friendly), or a
+  self-contained **HTML** player. Cast cycles cover every motion plus three
+  fake-3D moves — **turnaround** (a sliding head-turn with edge shading),
+  **side-step** (lateral travel with counter-shifting feet), and
+  **orbit-glance** (eyes orbit while the body sways the other way) — and two
+  back-to-back **combos**: **greeting** (`look → nod → jump`) and **idle-life**
+  (`bob ×4 → blink → look → blink → bob`). A one-click **cast page** dump writes
+  a standalone `index.html` that regenerates itself from the live engine.
 - **Surprise me** is spicier than 🎲: it sometimes picks the options random
   generation skips (deep slants, off-center eyes — marked with an accent dot in
   the controls). Motion respects `prefers-reduced-motion`.

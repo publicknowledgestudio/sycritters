@@ -950,6 +950,7 @@ globalThis.Sycritters = (function () {
   let pushDirB = "l";  // the "transition to" direction for the A⇄B push export
   let lastFrame = -1;
   let wallTiles = [];
+  let castPreviewTiles = [];
 
   function newSeed() {
     return Math.floor(Math.random() * 0x100000000).toString(36);
@@ -1081,14 +1082,27 @@ globalThis.Sycritters = (function () {
   const PUSH_TRANSITIONS = {};
   for (const a of PUSH_DIRS) for (const b of PUSH_DIRS) if (a !== b) PUSH_TRANSITIONS["pushx-" + a + b] = PUSH_TRANSITION_LEN;
 
+  // Cast-only "fake 3D" cycles — exported / cast-page motions that aren't in the
+  // live editor MOTIONS table. Defined as literals so their frame counts are
+  // explicit (and stable for the cast-combos tests).
+  const CAST_EXTRA = { turnaround: 24, "side-step": 16, "orbit-glance": 16 };
+
+  // Combos sequence existing cycles back-to-back for production exports.
+  const CAST_COMBOS = {
+    greeting: ["look", "nod", "jump"],
+    "idle-life": ["bob", "bob", "bob", "bob", "blink", "look", "blink", "bob"],
+  };
+  const CAST_COMBO_LEN = { greeting: 32, "idle-life": 56 };
+
   // concrete cycle name -> frame count, for every cycle with motion (omits "none").
   const CAST_CYCLES = Object.assign(
     Object.fromEntries(MOTIONS.filter((m) => m.frames).flatMap((m) => cyclesOf(m).map((c) => [c, m.frames]))),
-    PUSH_TRANSITIONS
+    PUSH_TRANSITIONS, CAST_EXTRA, CAST_COMBO_LEN
   );
   const MOTION_DRIVES_EYES = new Set([
     ...MOTIONS.filter((m) => m.eyes).flatMap(cyclesOf),
     ...Object.keys(PUSH_TRANSITIONS),
+    "turnaround", "side-step", "orbit-glance",
   ]);
 
   // One frame of any motion -> { grid, paint, transform, fr, eyesDriven }.
@@ -1097,8 +1111,38 @@ globalThis.Sycritters = (function () {
   // seamless loop from i/n. This is the single composer behind the editor, the
   // sprite sheet, the PNG sequences, the video capture and the cast page.
   function motionFrame(spec, cycle, i, n, liveFrame) {
+    // combos play their member cycles back-to-back: route i to the active member.
+    const combo = CAST_COMBOS[cycle];
+    if (combo) {
+      let cursor = 0;
+      for (const part of combo) {
+        const len = CAST_CYCLES[part];
+        if (i < cursor + len) return motionFrame(spec, part, i - cursor, len);
+        cursor += len;
+      }
+      const last = combo[combo.length - 1];
+      return motionFrame(spec, last, CAST_CYCLES[last] - 1, CAST_CYCLES[last]);
+    }
     const fr = { gaze: spec.eyes.gaze || { dx: 0, dy: 0 }, blink: false };
     let transform = null, paint = restPaint(spec);
+    // Shade the leading/trailing column to fake depth as the body turns sideways.
+    const edgePaint = (turn) => {
+      const basePaint = restPaint(spec);
+      const mix = (hex, target, amt) => {
+        const rgb = (h) => [1, 3, 5].map((p) => parseInt(h.slice(p, p + 2), 16));
+        const a = rgb(hex), b = rgb(target);
+        return "#" + a.map((v, idx) => {
+          const nn = Math.round(v + (b[idx] - v) * amt);
+          return ("0" + nn.toString(16)).slice(-2);
+        }).join("");
+      };
+      return (x, y) => {
+        let col = basePaint(x, y);
+        if ((turn < 0 && x === 0) || (turn > 0 && x === 7)) col = mix(col, "#ffffff", 0.28);
+        if ((turn < 0 && x === 7) || (turn > 0 && x === 0)) col = mix(col, "#000000", 0.24);
+        return col;
+      };
+    };
     const pc = PAINT_CYCLE[cycle];
     if (pc) {
       const arg = liveFrame != null ? liveFrame : (i / n) * pc[1];
@@ -1204,6 +1248,27 @@ globalThis.Sycritters = (function () {
     } else if (cycle === "sleep") {       // lids shut, slow breathing squash
       fr.blink = 2;
       transform = { dx: 0, dy: 0, squashY: [1, 1, 1, 0.94, 0.94, 0.94, 0.94, 0.94, 0.94, 1, 1, 1][i] };
+    } else if (cycle === "turnaround") {
+      // fake a 3D head turn: body slides, eyes track, and the near edge catches light.
+      const turns = [-1,-1,-1,-1,-1,-1, 0,0,0,0, 1,1,1,1,1,1, 0,0,0,0,0,0,0,0];
+      const turn = turns[i];
+      transform = { dx: turn, dy: [0,0,0,-1,-1,0,0,0,0,0,0,0,0,-1,-1,0,0,0,0,0,0,0,0,0][i], squashY: 1 };
+      fr.gaze = { dx: turn, dy: 0 };
+      if (turn) paint = edgePaint(turn);
+    } else if (cycle === "side-step") {
+      // travel sideways and back; feet counter-shift so it reads as stepping through space.
+      const dxS = [0,1,2,2,3,3,2,1,0,-1,-2,-2,-3,-3,-2,-1];
+      const dyS = [0,0,-1,0,0,-1,0,0,0,0,-1,0,0,-1,0,0];
+      transform = { dx: dxS[i], dy: dyS[i], squashY: 1 };
+      fr.gaze = { dx: dxS[i] > 0 ? 1 : dxS[i] < 0 ? -1 : 0, dy: 0 };
+      fr.legShift = [-1,-1,0,1,1,0,-1,-1,1,1,0,-1,-1,0,1,1][i];
+    } else if (cycle === "orbit-glance") {
+      // eyes orbit one way while the body sways the other, suggesting a tiny face turn.
+      const gazeX = [-1,-1,0,1,1,1,0,-1,-1,-1,0,1,1,0,-1,-1][i];
+      const gazeY = [0,-1,-1,-1,0,1,1,1,0,-1,-1,0,1,1,1,0][i];
+      transform = { dx: -gazeX, dy: gazeY > 0 ? 1 : 0, squashY: 1 };
+      fr.gaze = { dx: gazeX, dy: gazeY };
+      if (gazeX) paint = edgePaint(-gazeX);
     }
     return {
       grid: S.rasterize(spec, fr), paint, transform, fr,
@@ -1250,13 +1315,27 @@ globalThis.Sycritters = (function () {
     drawMini(c);
   }
 
+  // Cast cards play their selected cycle live (stepped at the integer frame).
+  function drawCastPreviewTile(tile, frame) {
+    const n = CAST_CYCLES[tile.sel.value] || 1;
+    const i = ((frame % n) + n) % n;
+    const f = motionFrame(tile.spec, tile.sel.value, i, n);
+    drawCanvas(tile.canvas, f.grid, f.paint, 12, f.transform, 4);
+  }
+
+  function drawCastPreviews(frame) {
+    for (const tile of castPreviewTiles) drawCastPreviewTile(tile, frame);
+  }
+
   function loop(t) {
     const rawFrame = t / (1000 / FPS);
     const smoothState = !!PAINT_CYCLE[bodyAnimMode];
     const frame = smoothState ? rawFrame : Math.floor(rawFrame);
+    const castFrameIndex = Math.floor(rawFrame);
     if (smoothState || frame !== lastFrame) {
       // skip redraws when nothing animates (lastFrame -1 forces one draw)
       if (lastFrame === -1 || editorAnimated()) draw(frame);
+      if (!reducedMotion.matches) drawCastPreviews(castFrameIndex);
       lastFrame = frame;
     }
     requestAnimationFrame(loop);
@@ -1559,6 +1638,7 @@ globalThis.Sycritters = (function () {
 
   function renderCast() {
     const cast = loadCast();
+    castPreviewTiles = [];
     castGrid.innerHTML = "";
     if (!cast.length) {
       const empty = document.createElement("div");
@@ -1572,7 +1652,6 @@ globalThis.Sycritters = (function () {
       const tile = document.createElement("div");
       tile.className = "cast__member";
       const c = document.createElement("canvas");
-      drawCanvas(c, S.rasterize(spec), restPaint(spec), 16);
       c.title = "load " + m.name + " into the editor";
       c.setAttribute("role", "img");
       c.setAttribute("aria-label", m.name);
@@ -1603,6 +1682,9 @@ globalThis.Sycritters = (function () {
         o.value = cyc; o.textContent = cyc;
         sel.appendChild(o);
       }
+      // the card animates its selected cycle live; re-seed it on a cycle change
+      const previewTile = { spec, sel, canvas: c };
+      sel.addEventListener("change", () => drawCastPreviewTile(previewTile, 0));
       const fmt = document.createElement("select");
       fmt.className = "cast__fmt";
       fmt.setAttribute("aria-label", "export format for " + m.name);
@@ -1619,6 +1701,8 @@ globalThis.Sycritters = (function () {
       row.appendChild(sel); row.appendChild(fmt); row.appendChild(dl);
       tile.appendChild(rm); tile.appendChild(c); tile.appendChild(label); tile.appendChild(row);
       castGrid.appendChild(tile);
+      castPreviewTiles.push(previewTile);
+      drawCastPreviewTile(previewTile, 0);
     });
   }
 
@@ -1802,6 +1886,8 @@ ${safe(engineSrc)}
 const S = globalThis.Sycritters;
 const { gradientPaint, cellFill } = S;
 const WALK_LEGS = ${JSON.stringify(WALK_LEGS)};
+const CAST_CYCLES = ${JSON.stringify(CAST_CYCLES)};
+const CAST_COMBOS = ${JSON.stringify(CAST_COMBOS)};
 const PAINT_CYCLE = ${JSON.stringify(PAINT_CYCLE)};
 const MOTION_DRIVES_EYES = new Set(${JSON.stringify([...MOTION_DRIVES_EYES])});
 const PUSH_HOLD = ${PUSH_HOLD}, PUSH_TRANS = ${PUSH_TRANS};
@@ -1915,6 +2001,7 @@ const S = globalThis.Sycritters;
 const { gradientPaint, cellFill, specFromString } = S;
 const WALK_LEGS = ${JSON.stringify(WALK_LEGS)};
 const CAST_CYCLES = ${JSON.stringify(CAST_CYCLES)};
+const CAST_COMBOS = ${JSON.stringify(CAST_COMBOS)};
 const PAINT_CYCLE = ${JSON.stringify(PAINT_CYCLE)};
 const MOTION_DRIVES_EYES = new Set(${JSON.stringify([...MOTION_DRIVES_EYES])});
 const EXPORT_PAD = 4;
