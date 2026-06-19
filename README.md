@@ -18,9 +18,9 @@ Just open `index.html` in a browser. No build, no server, no dependencies.
   dots / handle / lego + diagonal slants **2tl/3tl/2tr/3tr**), a bottom half
   (flat / round / legs / splayed / tripod / tripod2 / toes / toes-a / toes-b /
   dots + slants **2bl/3bl/2br/3br**), the **middle** two rows (straight / pinch /
-  narrow, or a one-sided **bite**), and 2×2 eyes with 1×2 **bar** pupils — gaze
-  (parallel or **mirrored**, pupils pointing inward/outward together), a 1 or 2
-  px gap, and alignment. Touching one control changes only that axis
+  narrow, or a one-sided **bite**), and 2×2 eyes — pupil (dot or a 1×2 **bar**),
+  gaze (parallel or **mirrored**, pupils pointing inward/outward together), a 1
+  or 2 px gap, and alignment. Touching one control changes only that axis
   (lock-an-axis).
 - **Animate it.** Agent states include thinking, scanning, processing, bob, wants
   attention, and celebrate. Body and eye states use stepped pixel-art timing;
@@ -35,13 +35,6 @@ Just open `index.html` in a browser. No build, no server, no dependencies.
 - **Export.** Download the critter as a crisp **PNG** or scalable **SVG**
   (captured at the gradient's current frame), or a 12-frame **sprite sheet**
   of its motion cycle.
-- **Video cast.** Save named critters into a cast, preview the selected cycle
-  live, then export transparent PNG sequences or mp4/webm clips. Combo cycles include
-  **greeting** (`look → nod → jump`) and **idle-life** (`bob ×4 → blink → look →
-  blink → bob`); the **turnaround** cycle fakes a 3D turn with side motion,
-  gaze tracking, and edge shading, while **side-step** gives a lateral travel
-  beat with counter-shifting feet. **Orbit-glance** moves the eyes around while
-  the body sways opposite to suggest a tiny face turn.
 - **Surprise me** is spicier than 🎲: it sometimes picks the options random
   generation skips (deep slants, off-center eyes — marked with an accent dot in
   the controls). Motion respects `prefers-reduced-motion`.

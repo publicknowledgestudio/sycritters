@@ -68,6 +68,24 @@
   .specimen__plate .k { color: var(--accent); }
   .specimen__plate .v { color: var(--text); text-transform: none; word-break: break-all; }
 
+  /* second, size-adjustable preview (drag SIZE to see the critter scaled down) */
+  .specimen__mini {
+    display: flex; flex-direction: column; gap: 10px;
+    border-top: 1px solid var(--border); padding-top: 12px; margin-top: 4px;
+  }
+  .specimen__mini-stage {
+    background: var(--surface); border: 1px solid var(--border);
+    min-height: 56px; display: grid; place-items: center; padding: 12px;
+  }
+  #miniPreview { image-rendering: pixelated; display: block; }
+  .specimen__mini-ctl {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 11px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase;
+  }
+  .specimen__mini-ctl .k { color: var(--accent); }
+  .specimen__mini-ctl input[type="range"] { flex: 1; accent-color: var(--accent); cursor: pointer; }
+  .specimen__mini-ctl .v { color: var(--text); text-transform: none; min-width: 42px; text-align: right; }
+
   /* ---- controls ---- */
   .controls { display: flex; flex-direction: column; gap: 20px; }
   .ctl { background: var(--surface); border: 1px solid var(--border); padding: 16px; }
@@ -97,6 +115,7 @@
   }
   .btn:hover { border-color: var(--text); background: var(--text); color: var(--surface); }
   .btn:active { transform: scale(.97); }
+  .btn[aria-pressed="true"] { background: var(--text); color: var(--surface); border-color: var(--text); }
 
   .seedrow { display: flex; gap: 8px; margin-bottom: 8px; }
   .seedrow .field { flex: 1; }
@@ -171,15 +190,12 @@
 
   /* ---- video cast ---- */
   .cast { margin-top: 44px; }
-  .cast__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 14px; }
+  .cast__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
   .cast__member {
-    position: relative; display: flex; flex-direction: column; gap: 8px;
-    background: var(--surface); border: 1px solid var(--border); padding: 14px;
+    position: relative; display: flex; flex-direction: column; gap: 6px;
+    background: var(--surface); border: 1px solid var(--border); padding: 10px;
   }
-  .cast__member canvas {
-    display: block; width: 100%; height: auto; image-rendering: pixelated; cursor: pointer;
-    background: #fafaf8;
-  }
+  .cast__member canvas { display: block; width: 100%; height: auto; image-rendering: pixelated; cursor: pointer; }
   .cast__name {
     font-size: 11px; color: var(--text); letter-spacing: .5px;
     text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -191,15 +207,16 @@
     border: 1px solid transparent; padding: 2px 5px; cursor: pointer;
   }
   .cast__remove:hover { color: var(--accent); border-color: var(--border); }
-  .cast__row { display: flex; flex-wrap: wrap; gap: 6px; }
+  .cast__row { display: flex; flex-wrap: wrap; gap: 4px; }
   .cast__row .cast__dl { flex: 1; }
-  .cast__cycle {
-    flex-basis: 100%; min-width: 0; font-family: var(--mono); font-size: 11px;
+  .cast__cycle, .cast__fmt {
+    flex: 1; min-width: 0; font-family: var(--mono); font-size: 11px;
     color: var(--text); background: var(--surface);
     border: 1px solid var(--border); padding: 3px 4px; outline: none;
   }
-  .cast__cycle:focus { border-color: var(--accent); }
+  .cast__cycle:focus, .cast__fmt:focus { border-color: var(--accent); }
   .cast__dl { padding: 3px 8px; font-size: 9px; }
+  .cast__exp { flex-basis: 100%; }
 
   /* ---- naming dialog ---- */
   dialog {
@@ -233,6 +250,14 @@
     <div class="specimen">
       <div class="specimen__card"><canvas id="editor" width="256" height="256" role="img" aria-label="current critter preview"></canvas></div>
       <div class="specimen__plate"><span class="k">SEED</span><span class="v" id="seedReadout">&mdash;</span></div>
+      <div class="specimen__mini">
+        <div class="specimen__mini-stage"><canvas id="miniPreview" role="img" aria-label="scaled critter preview"></canvas></div>
+        <label class="specimen__mini-ctl">
+          <span class="k">SIZE</span>
+          <input id="miniSize" type="range" min="16" max="256" step="1" value="96" aria-label="preview size in pixels" />
+          <span class="v" id="miniSizeVal">96px</span>
+        </label>
+      </div>
     </div>
 
     <aside class="controls">
@@ -287,6 +312,18 @@
       <div class="ctl">
         <label class="ctl__label">&#9646; Motion</label>
         <div id="bodyAnim" class="seg"></div>
+        <div id="pushPanel" hidden>
+          <span class="sublabel">push direction</span>
+          <div id="pushDir" class="seg" title="which way the critter pushes"></div>
+          <span class="sublabel">transition to</span>
+          <div id="pushDirB" class="seg" title="second push direction for the A&#8644;B transition clip"></div>
+          <button id="pushPlay" class="btn btn--full" style="margin-top:8px" title="preview the A&#8644;B push transition in the editor">&#9656; play transition</button>
+          <span class="sublabel">export current push / transition</span>
+          <div class="exportrow">
+            <select id="pushFmt" class="field" aria-label="export format" style="flex:1"></select>
+            <button id="pushExport" class="btn" title="export the current push or transition in the chosen format">&#10515; export</button>
+          </div>
+        </div>
       </div>
 
       <div class="ctl">
@@ -887,6 +924,9 @@ globalThis.Sycritters = (function () {
     tops: $("tops"), bottoms: $("bottoms"), waist: $("waist"),
     eyeStyle: $("eyeStyle"), eyePupil: $("eyePupil"), eyeMirror: $("eyeMirror"),
     eyeGap: $("eyeGap"), eyeAlign: $("eyeAlign"), bodyAnim: $("bodyAnim"),
+    pushPanel: $("pushPanel"), pushDir: $("pushDir"), pushDirB: $("pushDirB"),
+    pushPlay: $("pushPlay"), pushFmt: $("pushFmt"), pushExport: $("pushExport"),
+    miniPreview: $("miniPreview"), miniSize: $("miniSize"), miniSizeVal: $("miniSizeVal"),
     animEyes: $("animEyes"),
     png: $("png"), svg: $("svg"), sheet: $("sheet"), link: $("link"),
     genWall: $("genWall"), grid: $("grid"),
@@ -901,14 +941,15 @@ globalThis.Sycritters = (function () {
   }
 
   function force2x2Eyes(spec) {
-    return { ...spec, eyes: { ...spec.eyes, style: "normal", pupil: "bar" } };
+    return { ...spec, eyes: { ...spec.eyes, style: "normal" } };
   }
 
   let current = force2x2Eyes(specFromURL() || S.generate("sycritter"));
   let bodyAnimMode = "none";
+  let pushDir = "r";   // active push direction (push wall)
+  let pushDirB = "l";  // the "transition to" direction for the A⇄B push export
   let lastFrame = -1;
   let wallTiles = [];
-  let castPreviewTiles = [];
 
   function newSeed() {
     return Math.floor(Math.random() * 0x100000000).toString(36);
@@ -946,21 +987,29 @@ globalThis.Sycritters = (function () {
   const FPS = 12;
 
   const hexes = (spec) => spec.colors.map((c) => c.hex);
-  // Body paint for a spec at a frame: a moving multi-color gradient.
-  function paintFor(spec, frame) {
-    const motion =
-      bodyAnimMode === "thinking" ? "pulse" :
-      bodyAnimMode === "scanning" ? "scan-y" :
-      bodyAnimMode === "processing" ? "sheen" :
-      "static";
-    return gradientPaint(hexes(spec), spec.gradientDir, motion, frame);
-  }
+
   // Resting (static) paint for wall tiles + exports.
   function restPaint(spec) {
     return gradientPaint(hexes(spec), spec.gradientDir, "static", 0);
   }
 
-  // Eyes: gaze + blink as a function of the integer frame counter.
+  // Smooth "paint" motions: name -> [gradient-motion, one-loop period in frames].
+  // The editor drives these with a continuous frame (smooth); exports map i/n
+  // onto exactly one period so the rendered cycle loops seamlessly.
+  const PAINT_CYCLE = {
+    thinking:   ["pulse",  2 * Math.PI * 22],
+    scanning:   ["scan-y", 36],
+    processing: ["sheen",  56],
+  };
+
+  // Live body paint at a continuous frame (used by editor exports: PNG/SVG).
+  function paintFor(spec, frame) {
+    const pc = PAINT_CYCLE[bodyAnimMode];
+    return pc ? gradientPaint(hexes(spec), spec.gradientDir, pc[0], frame) : restPaint(spec);
+  }
+
+  // Idle eyes for the editor: gaze drifts + periodic blink, keyed to the frame.
+  // Overlaid only when the active motion doesn't drive the eyes itself.
   function eyeFrame(frame) {
     const dirs = [
       { dx: 1, dy: 0 }, { dx: 0, dy: 0 }, { dx: -1, dy: 0 }, { dx: 0, dy: -1 },
@@ -971,44 +1020,196 @@ globalThis.Sycritters = (function () {
     const blink = b === 0 || b === 3 ? 1 : b === 1 || b === 2 ? 2 : 0;
     return { gaze, blink };
   }
-  function stateEyeFrame(frame) {
-    if (bodyAnimMode === "thinking") {
-      const dirs = [{ dx: 0, dy: -1 }, { dx: 1, dy: -1 }, { dx: 0, dy: 0 }, { dx: -1, dy: -1 }];
-      return { gaze: dirs[Math.floor(frame / 18) % dirs.length], blink: frame % 120 < 2 };
-    }
-    if (bodyAnimMode === "scanning") {
-      return { gaze: { dx: 0, dy: 0 }, blink: false };
-    }
-    if (bodyAnimMode === "processing") {
-      const dirs = [{ dx: -1, dy: 1 }, { dx: 0, dy: 0 }, { dx: 1, dy: 1 }, { dx: 0, dy: 0 }];
-      return { gaze: dirs[Math.floor(frame / 14) % dirs.length], blink: frame % 84 < 1 };
-    }
-    return null;
-  }
-
-  // Body motion in whole-pixel steps (pixel-art), keyed to the frame counter.
-  const walkFrame = (frame) => Math.floor(frame / 2);
-  function bodyTransform(frame) {
-    if (bodyAnimMode === "bob") {
-      const seq = [0, 0, -1, -1];
-      return { dx: 0, dy: seq[frame % seq.length], squashY: 1 };
-    }
-    if (bodyAnimMode === "jump") { // visible label: wants attention
-      const dyS = [0, -1, -2, -2, -1, 0, 0, 0, 0, 0, 0, 0];
-      const sqS = [1, 1, 1, 1, 1, 0.88, 1, 1, 1, 1, 1, 1];
-      const i = frame % dyS.length;
-      return { dx: 0, dy: dyS[i], squashY: sqS[i] };
-    }
-    if (bodyAnimMode === "walk") { // visible label: celebrate
-      const dxS = [0, 1, 1, 0, -1, -1], dyS = [0, -1, 0, 0, -1, 0];
-      const i = walkFrame(frame) % dxS.length;
-      return { dx: dxS[i], dy: dyS[i], squashY: 1 };
-    }
-    return { dx: 0, dy: 0, squashY: 1 };
-  }
 
   // Feet counter the celebrate sway so the legs read as stepping, not sliding.
   const WALK_LEGS = [0, -1, -1, 0, 1, 1];
+
+  // --- Unified motion table -------------------------------------------------
+  // Single source of truth shared by the live Motion control AND the export
+  // cast cycles, so the two can never drift apart. `frames` is the loop length
+  // (entries without it, like "none", are live-only). `eyes:true` means the
+  // cycle drives the eyes itself, so the editor's idle-eye layer steps aside.
+  const MOTIONS = [
+    { name: "none",       label: "none" },
+    { name: "thinking",   label: "thinking",        frames: 24, eyes: true },
+    { name: "scanning",   label: "scanning",        frames: 24, eyes: true },
+    { name: "processing", label: "processing",      frames: 24, eyes: true },
+    { name: "bob",        label: "bob",             frames: 4 },
+    { name: "jump",       label: "wants attention", frames: 12 },
+    { name: "walk",       label: "celebrate",       frames: 12 },
+    { name: "push",       label: "push wall",       frames: 8,  eyes: true, dirs: ["r", "l", "u", "d"] },
+    { name: "pull",       label: "pull heavy",      frames: 12, eyes: true },
+    { name: "study",      label: "study",           frames: 12, eyes: true },
+    { name: "float",      label: "float yoga",      frames: 24, eyes: true },
+    { name: "wiggle",     label: "wiggle",          frames: 8 },
+    { name: "droop",      label: "sad",             frames: 12, eyes: true },
+    { name: "excited",    label: "excited",         frames: 8 },
+    { name: "blink",      label: "blink",           frames: 12, eyes: true },
+    { name: "shake",      label: "shake",           frames: 8 },
+    { name: "nod",        label: "nod",             frames: 8,  eyes: true },
+    { name: "dance",      label: "dance",           frames: 8 },
+    { name: "look",       label: "look",            frames: 12, eyes: true },
+    { name: "sleep",      label: "sleep",           frames: 12, eyes: true },
+  ];
+  // A motion with `dirs` expands into one concrete cycle per direction
+  // ("push" -> push-r / push-l / push-u / push-d); everything else is itself.
+  const cyclesOf = (m) => (m.dirs ? m.dirs.map((d) => `${m.name}-${d}`) : [m.name]);
+
+  // --- push transitions: "pushx-AB" plays push A -> ease to push B -> back --
+  // The steady (un-throbbing) pushed pose per direction; the transition eases
+  // between two of these so the critter relaxes through neutral, turns, re-braces.
+  const PUSH_DIRS = ["r", "l", "u", "d"];
+  const PUSH_HOLD = 8, PUSH_TRANS = 8, PUSH_TRANSITION_LEN = 2 * PUSH_HOLD + 2 * PUSH_TRANS; // 32
+  const PUSH_POSE = {
+    r: { dx: 2, dy: 0, leg: -1, gaze: { dx: 1, dy: 0 } },
+    l: { dx: -2, dy: 0, leg: 1, gaze: { dx: -1, dy: 0 } },
+    u: { dx: 0, dy: -2, leg: 0, gaze: { dx: 0, dy: -1 } },
+    d: { dx: 0, dy: 2, leg: 0, gaze: { dx: 0, dy: 1 } },
+  };
+  // One eased step from pushed-pose `a` toward `b` (un-strains through neutral).
+  function lerpPushPose(spec, a, b, t) {
+    const A = PUSH_POSE[a], B = PUSH_POSE[b];
+    const r = (x, y) => Math.round(x + (y - x) * t);
+    const fr = {
+      gaze: { dx: r(A.gaze.dx, B.gaze.dx), dy: r(A.gaze.dy, B.gaze.dy) },
+      blink: false, legShift: r(A.leg, B.leg),
+    };
+    const squashY = 1 - Math.sin(Math.PI * t) * 0.08;
+    return { grid: S.rasterize(spec, fr), paint: restPaint(spec), transform: { dx: r(A.dx, B.dx), dy: r(A.dy, B.dy), squashY }, fr, eyesDriven: true };
+  }
+  // every ordered pair of distinct directions -> a 32-frame transition cycle
+  const PUSH_TRANSITIONS = {};
+  for (const a of PUSH_DIRS) for (const b of PUSH_DIRS) if (a !== b) PUSH_TRANSITIONS["pushx-" + a + b] = PUSH_TRANSITION_LEN;
+
+  // concrete cycle name -> frame count, for every cycle with motion (omits "none").
+  const CAST_CYCLES = Object.assign(
+    Object.fromEntries(MOTIONS.filter((m) => m.frames).flatMap((m) => cyclesOf(m).map((c) => [c, m.frames]))),
+    PUSH_TRANSITIONS
+  );
+  const MOTION_DRIVES_EYES = new Set([
+    ...MOTIONS.filter((m) => m.eyes).flatMap(cyclesOf),
+    ...Object.keys(PUSH_TRANSITIONS),
+  ]);
+
+  // One frame of any motion -> { grid, paint, transform, fr, eyesDriven }.
+  // `i` is the integer step in [0,n); `liveFrame` (optional, continuous) drives
+  // the smooth paint cycles in the editor — exports omit it and get exactly one
+  // seamless loop from i/n. This is the single composer behind the editor, the
+  // sprite sheet, the PNG sequences, the video capture and the cast page.
+  function motionFrame(spec, cycle, i, n, liveFrame) {
+    const fr = { gaze: spec.eyes.gaze || { dx: 0, dy: 0 }, blink: false };
+    let transform = null, paint = restPaint(spec);
+    const pc = PAINT_CYCLE[cycle];
+    if (pc) {
+      const arg = liveFrame != null ? liveFrame : (i / n) * pc[1];
+      paint = gradientPaint(hexes(spec), spec.gradientDir, pc[0], arg);
+      if (cycle === "thinking") {
+        const g = [{ dx: 0, dy: -1 }, { dx: 1, dy: -1 }, { dx: 0, dy: 0 }, { dx: -1, dy: -1 }];
+        fr.gaze = g[Math.floor(i / 6) % g.length];
+      } else if (cycle === "processing") {
+        const g = [{ dx: -1, dy: 1 }, { dx: 0, dy: 0 }, { dx: 1, dy: 1 }, { dx: 0, dy: 0 }];
+        fr.gaze = g[Math.floor(i / 6) % g.length];
+      } // scanning: eyes hold steady forward
+    } else if (cycle === "jump") {       // visible label: wants attention
+      const dyS = [0, -1, -2, -2, -1, 0, 0, 0, 0, 0, 0, 0];
+      const sqS = [1, 1, 1, 1, 1, 0.88, 1, 1, 1, 1, 1, 1];
+      transform = { dx: 0, dy: dyS[i], squashY: sqS[i] };
+    } else if (cycle === "walk") {        // visible label: celebrate
+      const dxS = [0, 0, 1, 1, 1, 1, 0, 0, -1, -1, -1, -1];
+      const dyS = [0, 0, -1, -1, 0, 0, 0, 0, -1, -1, 0, 0];
+      const lg  = [0, 0, -1, -1, -1, -1, 0, 0, 1, 1, 1, 1];
+      transform = { dx: dxS[i], dy: dyS[i], squashY: 1 };
+      fr.legShift = lg[i];
+    } else if (cycle === "bob") {
+      transform = { dx: 0, dy: [0, 0, -1, -1][i], squashY: 1 };
+    } else if (cycle.indexOf("pushx-") === 0) { // push A -> ease to B -> hold -> back
+      const a = cycle[6], b = cycle[7], H = PUSH_HOLD, T = PUSH_TRANS;
+      if (i < H) return motionFrame(spec, "push-" + a, i, H);
+      if (i < H + T) return lerpPushPose(spec, a, b, (i - H) / T);
+      if (i < 2 * H + T) return motionFrame(spec, "push-" + b, i - (H + T), H);
+      return lerpPushPose(spec, b, a, (i - (2 * H + T)) / T);
+    } else if (cycle.indexOf("push") === 0) { // pushing a wall in a chosen direction
+      // dir ∈ r/l/u/d (bare "push" defaults to right). Lean into the wall,
+      // brace the legs behind a horizontal push, and strain in squash pulses.
+      const dir = cycle.split("-")[1] || "r";
+      const lean = [1, 2, 2, 2, 2, 2, 2, 1][i % 8];        // throb against the surface
+      const strain = [1, 0.94, 1, 0.94, 1, 0.94, 1, 0.94][i % 8];
+      const hx = dir === "r" ? 1 : dir === "l" ? -1 : 0;
+      const vy = dir === "d" ? 1 : dir === "u" ? -1 : 0;
+      transform = {
+        dx: hx * lean, dy: vy * lean,
+        squashY: dir === "d" ? Math.min(strain, 0.92) : strain, // pressing down compresses
+      };
+      if (hx) fr.legShift = -hx;          // feet braced behind a sideways push
+      fr.gaze = { dx: hx, dy: vy };       // eyes fixed on the surface
+    } else if (cycle === "pull") {        // heaving something heavy (load on the left)
+      // reach toward the load, then heave back hard with a straining shudder
+      const dxS = [-1, -1, 0, 1, 2, 2, 2, 1, 1, 0, -1, -1];
+      const sqS = [1, 1, 0.96, 0.9, 0.88, 0.92, 0.96, 1, 1, 1, 1, 1];
+      const lgS = [1, 1, 0, -1, -1, -1, -1, 0, 0, 1, 1, 1]; // dig the heels in on the heave
+      transform = { dx: dxS[i], dy: 0, squashY: sqS[i] };
+      fr.legShift = lgS[i];
+      fr.gaze = { dx: -1, dy: 0 };
+      fr.blink = [0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0][i]; // squint at peak effort
+    } else if (cycle === "study") {       // learning: reading down, scanning lines
+      const gx = [-1, 0, 1, 1, -1, 0, 1, 1, 0, 0, 0, 0];
+      const gy = [1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1]; // looks up to ponder mid-cycle
+      fr.gaze = { dx: gx[i], dy: gy[i] };
+      fr.blink = [0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0][i];
+      transform = { dx: 0, dy: [0, 0, 0, 0, 0, 0, 0, 0, -1, -1, 0, 0][i], squashY: 1 };
+    } else if (cycle === "float") {       // serene floating yoga: hover + slow breath + sway
+      const dyS = [0, 0, -1, -1, -1, -2, -2, -2, -2, -2, -1, -1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0];
+      const sqS = [1, 1, 1, 0.98, 0.96, 0.94, 0.94, 0.96, 0.98, 1, 1, 1, 1, 1, 1, 0.98, 0.96, 0.94, 0.94, 0.96, 0.98, 1, 1, 1];
+      const lgS = [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, 0, 0, 0, 0]; // shift "poses" side to side
+      const blS = [2, 2, 2, 2, 2, 2, 1, 0, 0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 1, 0, 0, 1, 2, 2];     // eyes mostly closed, peeking open
+      transform = { dx: 0, dy: dyS[i], squashY: sqS[i] };
+      fr.legShift = lgS[i];
+      fr.gaze = { dx: 0, dy: -1 };        // gaze gently upward when the lids part
+      fr.blink = blS[i];
+    } else if (cycle === "wiggle") {      // playful side jitter
+      transform = {
+        dx: [0, 1, 0, -1, 0, 1, 0, -1][i], dy: 0,
+        squashY: [1, 0.94, 1, 0.94, 1, 0.94, 1, 0.94][i],
+      };
+    } else if (cycle === "droop") {       // sad: slow heavy sag, eyes downcast
+      transform = {
+        dx: 0, dy: 0,
+        squashY: [1, 0.97, 0.94, 0.92, 0.92, 0.92, 0.92, 0.92, 0.92, 0.94, 0.97, 1][i],
+      };
+      fr.gaze = { dx: 0, dy: 1 };
+      fr.blink = [0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0][i];
+    } else if (cycle === "excited") {     // bouncy double-hop
+      transform = {
+        dx: 0,
+        dy: [0, -2, 0, -2, 0, -2, 0, -2][i],
+        squashY: [0.9, 1, 0.9, 1, 0.9, 1, 0.9, 1][i],
+      };
+    } else if (cycle === "blink") {
+      fr.blink = [0, 0, 0, 0, 1, 2, 2, 1, 0, 0, 0, 0][i]; // ease shut, ease open
+    } else if (cycle === "shake") {       // quick "no" headshake
+      transform = { dx: [0, 1, 0, -1, 0, 1, 0, -1][i], dy: 0, squashY: 1 };
+    } else if (cycle === "nod") {         // double "yes" dip, gaze following
+      const down = [0, 1, 1, 0, 0, 1, 1, 0][i];
+      transform = { dx: 0, dy: down, squashY: 1 };
+      fr.gaze = { dx: 0, dy: down ? 1 : 0 };
+    } else if (cycle === "dance") {       // sway + squash on the beat, feet planted
+      transform = {
+        dx: [0, 1, 1, 0, 0, -1, -1, 0][i],
+        dy: [0, -1, 0, 0, 0, -1, 0, 0][i],
+        squashY: [1, 0.88, 1, 1, 1, 0.88, 1, 1][i],
+      };
+      fr.legShift = [0, -1, -1, 0, 0, 1, 1, 0][i];
+    } else if (cycle === "look") {        // eyes-only glance to the side and back
+      fr.gaze = { dx: [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0][i], dy: 0 };
+    } else if (cycle === "sleep") {       // lids shut, slow breathing squash
+      fr.blink = 2;
+      transform = { dx: 0, dy: 0, squashY: [1, 1, 1, 0.94, 0.94, 0.94, 0.94, 0.94, 0.94, 1, 1, 1][i] };
+    }
+    return {
+      grid: S.rasterize(spec, fr), paint, transform, fr,
+      eyesDriven: MOTION_DRIVES_EYES.has(cycle),
+    };
+  }
 
   const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
   if (reducedMotion.addEventListener) reducedMotion.addEventListener("change", () => { lastFrame = -1; });
@@ -1017,45 +1218,45 @@ globalThis.Sycritters = (function () {
     return !reducedMotion.matches && (els.animEyes.checked || bodyAnimMode !== "none");
   }
 
-  // Everything the editor (and the sprite sheet) needs for one frame.
+  // Everything the editor needs for one frame, via the shared motionFrame
+  // composer. The active cycle owns body + (when eyes:true) the eyes; otherwise
+  // the editor's idle-eye layer is overlaid on top so resting critters still
+  // glance and blink.
   function composeFrame(frame) {
-    const f = { gaze: current.eyes.gaze || { dx: 0, dy: 0 }, blink: false };
-    let paint = restPaint(current), transform = null;
-    if (!reducedMotion.matches) {
-      const stateEyes = stateEyeFrame(frame);
-      if (stateEyes) { f.gaze = stateEyes.gaze; f.blink = stateEyes.blink; }
-      else if (els.animEyes.checked) { const e = eyeFrame(frame); f.gaze = e.gaze; f.blink = e.blink; }
-      if (bodyAnimMode === "walk") f.legShift = WALK_LEGS[walkFrame(frame) % WALK_LEGS.length];
-      paint = paintFor(current, frame);
-      transform = bodyTransform(frame);
+    const cycle = reducedMotion.matches ? "none" : bodyAnimMode;
+    const n = CAST_CYCLES[cycle] || 1;
+    const i = ((Math.floor(frame) % n) + n) % n;
+    const mf = motionFrame(current, cycle, i, n, frame);
+    if (!reducedMotion.matches && els.animEyes.checked && !mf.eyesDriven) {
+      const e = eyeFrame(frame);
+      const fr = { ...mf.fr, gaze: e.gaze, blink: e.blink };
+      return { grid: S.rasterize(current, fr), paint: mf.paint, transform: mf.transform };
     }
-    return { grid: S.rasterize(current, f), paint, transform };
+    return mf;
+  }
+
+  const MINI_PAD = 2; // margin cells in the scaled preview (headroom for motion)
+  function drawMini(c) {
+    const cells = 8 + 2 * MINI_PAD;
+    const want = +els.miniSize.value || 96;
+    const s = Math.max(1, Math.round(want / cells)); // crisp integer pixels-per-cell
+    drawCanvas(els.miniPreview, c.grid, c.paint, s, c.transform, MINI_PAD);
+    els.miniSizeVal.textContent = (cells * s) + "px"; // the actual (snapped) size
   }
 
   function draw(frame) {
     const c = composeFrame(frame);
     drawCanvas(els.editor, c.grid, c.paint, EDITOR_SCALE, c.transform, EDITOR_PAD);
-  }
-
-  function drawCastPreviewTile(tile, frame) {
-    const n = CAST_CYCLES[tile.sel.value] || 1;
-    const f = castFrame(tile.spec, tile.sel.value, frame % n, n);
-    drawCanvas(tile.canvas, f.grid, f.paint, 12, f.transform, 4);
-  }
-
-  function drawCastPreviews(frame) {
-    for (const tile of castPreviewTiles) drawCastPreviewTile(tile, frame);
+    drawMini(c);
   }
 
   function loop(t) {
     const rawFrame = t / (1000 / FPS);
-    const smoothState = bodyAnimMode === "processing" || bodyAnimMode === "scanning";
+    const smoothState = !!PAINT_CYCLE[bodyAnimMode];
     const frame = smoothState ? rawFrame : Math.floor(rawFrame);
-    const castFrameIndex = Math.floor(rawFrame);
     if (smoothState || frame !== lastFrame) {
       // skip redraws when nothing animates (lastFrame -1 forces one draw)
       if (lastFrame === -1 || editorAnimated()) draw(frame);
-      if (!reducedMotion.matches) drawCastPreviews(castFrameIndex);
       lastFrame = frame;
     }
     requestAnimationFrame(loop);
@@ -1159,15 +1360,30 @@ globalThis.Sycritters = (function () {
     buildSeg(els.waist, ["straight", "pinch", "narrow", "bite-l", "bite-r"].map((v) => ({ value: v, label: v, preview: "waist" })), (v) => override({ waist: v }), false);
     buildSeg(els.bottoms, S.BOTTOMS.map((m) => ({ value: m.name, label: m.name, preview: "bottom" })), (v) => override({ bottom: v }), true);
     buildSeg(els.eyeStyle, ["normal"], (v) => override({ eyes: { ...current.eyes, style: v } }), false);
-    buildSeg(els.eyePupil, ["bar"], (v) => override({ eyes: { ...current.eyes, pupil: v } }), false);
+    buildSeg(els.eyePupil, ["dot", "bar"], (v) => override({ eyes: { ...current.eyes, pupil: v } }), false);
     buildSeg(els.eyeMirror, ["parallel", "mirrored"], (v) => override({ eyes: { ...current.eyes, mirror: v === "mirrored" } }), false);
     buildSeg(els.eyeGap, ["1", "2"], (v) => override({ eyes: { ...current.eyes, gap: Number(v) } }), false);
     buildSeg(els.eyeAlign, ["left", "center", "right"], (v) => override({ eyes: { ...current.eyes, align: v } }), false);
-    buildSeg(els.bodyAnim, [
-      "none", "thinking", "scanning", "processing", "bob",
-      { value: "jump", label: "wants attention" },
-      { value: "walk", label: "celebrate" },
-    ], (v) => { bodyAnimMode = v; }, false);
+    buildSeg(els.bodyAnim, MOTIONS.map((m) => ({ value: m.name, label: m.label })),
+      // "push" is directional: route it to the active push-<dir> cycle.
+      (v) => { bodyAnimMode = v === "push" ? "push-" + pushDir : v; }, false);
+    const DIR_LABELS = [
+      { value: "r", label: "▶ right" }, { value: "l", label: "◀ left" },
+      { value: "u", label: "▲ up" },    { value: "d", label: "▼ down" },
+    ];
+    buildSeg(els.pushDir, DIR_LABELS, (v) => { pushDir = v; bodyAnimMode = "push-" + v; }, false);
+    buildSeg(els.pushDirB, DIR_LABELS, (v) => {
+      pushDirB = v;
+      // if a transition is currently previewing, retarget it live
+      if (String(bodyAnimMode).indexOf("pushx-") === 0) bodyAnimMode = transitionCycle();
+    }, false);
+    // export-format dropdown for the editor critter's current push / transition
+    els.pushFmt.innerHTML = "";
+    for (const f of EXPORT_FORMATS) {
+      const o = document.createElement("option");
+      o.value = f.value; o.textContent = f.label;
+      els.pushFmt.appendChild(o);
+    }
     // mark the options random generation deliberately skips
     markSpice(els.tops, ["3tl", "3tr"]);
     markSpice(els.bottoms, ["3bl", "3br"]);
@@ -1197,7 +1413,19 @@ globalThis.Sycritters = (function () {
     setPressed(els.eyeMirror, (b) => b.dataset.value === (current.eyes.mirror ? "mirrored" : "parallel"));
     setPressed(els.eyeGap, (b) => b.dataset.value === String(current.eyes.gap));
     setPressed(els.eyeAlign, (b) => b.dataset.value === (current.eyes.align || "center"));
-    setPressed(els.bodyAnim, (b) => b.dataset.value === bodyAnimMode);
+    setPressed(els.bodyAnim, (b) =>
+      b.dataset.value === bodyAnimMode ||
+      (b.dataset.value === "push" && String(bodyAnimMode).indexOf("push") === 0));
+    setPressed(els.pushDir, (b) => b.dataset.value === pushDir);
+    setPressed(els.pushDirB, (b) => b.dataset.value === pushDirB);
+    els.pushPanel.hidden = String(bodyAnimMode).indexOf("push") !== 0;
+    els.pushPlay.setAttribute("aria-pressed", String(bodyAnimMode).indexOf("pushx-") === 0 ? "true" : "false");
+  }
+  // the editor's current push/transition cycle (skips a degenerate A==B pair)
+  function transitionCycle() {
+    let b = pushDirB;
+    if (b === pushDir) b = PUSH_DIRS.find((d) => d !== pushDir);
+    return "pushx-" + pushDir + b;
   }
 
   /* gallery wall */
@@ -1249,10 +1477,10 @@ globalThis.Sycritters = (function () {
     const ctx = sheet.getContext("2d");
     ctx.imageSmoothingEnabled = false;
     const tmp = document.createElement("canvas");
+    const n = CAST_CYCLES[bodyAnimMode] || frames; // "none" -> static strip
     for (let f = 0; f < frames; f++) {
-      const fr = { gaze: current.eyes.gaze || { dx: 0, dy: 0 }, blink: false };
-      if (bodyAnimMode === "walk") fr.legShift = WALK_LEGS[walkFrame(f) % WALK_LEGS.length];
-      drawCanvas(tmp, S.rasterize(current, fr), paintFor(current, f), scale, bodyTransform(f), pad);
+      const mf = motionFrame(current, bodyAnimMode, f % n, n);
+      drawCanvas(tmp, mf.grid, mf.paint, scale, mf.transform, pad);
       ctx.drawImage(tmp, f * cell, 0);
     }
     return sheet;
@@ -1269,6 +1497,10 @@ globalThis.Sycritters = (function () {
       setTimeout(() => { els.link.textContent = "Link"; }, 900);
     });
   }
+
+  // The editor critter at its current motion (push, transition, or any cycle) is
+  // exported through the same `exportAnimation` the cast uses — see the push
+  // panel's format dropdown + export button below.
 
   /* wiring */
   els.seed.addEventListener("change", (e) => {
@@ -1303,6 +1535,10 @@ globalThis.Sycritters = (function () {
   els.svg.addEventListener("click", () => downloadSVG());
   els.sheet.addEventListener("click", () => downloadSheet());
   els.link.addEventListener("click", copyLink);
+  els.pushPlay.addEventListener("click", () => { bodyAnimMode = transitionCycle(); render(); });
+  els.pushExport.addEventListener("click", (e) =>
+    exportAnimation(current, current.seed, bodyAnimMode, els.pushFmt.value, e.currentTarget));
+  els.miniSize.addEventListener("input", () => { lastFrame = -1; }); // redraw the scaled preview
   els.genWall.addEventListener("click", () => generateWall());
 
   /* ---- video cast (named critters persisted to localStorage) ---------- */
@@ -1323,7 +1559,6 @@ globalThis.Sycritters = (function () {
 
   function renderCast() {
     const cast = loadCast();
-    castPreviewTiles = [];
     castGrid.innerHTML = "";
     if (!cast.length) {
       const empty = document.createElement("div");
@@ -1333,15 +1568,16 @@ globalThis.Sycritters = (function () {
       return;
     }
     cast.forEach((m, i) => {
-      const spec = force2x2Eyes(specFromString(m.code));
+      const spec = specFromString(m.code);
       const tile = document.createElement("div");
       tile.className = "cast__member";
       const c = document.createElement("canvas");
+      drawCanvas(c, S.rasterize(spec), restPaint(spec), 16);
       c.title = "load " + m.name + " into the editor";
       c.setAttribute("role", "img");
       c.setAttribute("aria-label", m.name);
       c.addEventListener("click", () => {
-        current = force2x2Eyes(spec);
+        current = spec;
         render();
         document.querySelector(".stage").scrollIntoView({ behavior: "smooth", block: "start" });
       });
@@ -1356,7 +1592,7 @@ globalThis.Sycritters = (function () {
         saveCast(next);
         renderCast();
       });
-      // png-sequence row: cycle picker + download
+      // export row: animation cycle + format + one export button
       const row = document.createElement("div");
       row.className = "cast__row";
       const sel = document.createElement("select");
@@ -1367,189 +1603,109 @@ globalThis.Sycritters = (function () {
         o.value = cyc; o.textContent = cyc;
         sel.appendChild(o);
       }
-      const previewTile = { spec, sel, canvas: c };
-      sel.addEventListener("change", () => drawCastPreviewTile(previewTile, 0));
+      const fmt = document.createElement("select");
+      fmt.className = "cast__fmt";
+      fmt.setAttribute("aria-label", "export format for " + m.name);
+      for (const f of EXPORT_FORMATS) {
+        const o = document.createElement("option");
+        o.value = f.value; o.textContent = f.label;
+        fmt.appendChild(o);
+      }
       const dl = document.createElement("button");
-      dl.className = "btn cast__dl"; dl.textContent = "⤓ seq";
-      dl.title = "download the selected cycle as numbered PNG frames (alpha)";
-      dl.setAttribute("aria-label", "download " + m.name + " PNG sequence");
-      dl.addEventListener("click", () => downloadCastSequence(m, sel.value));
-      const vid = document.createElement("button");
-      vid.className = "btn cast__dl"; vid.textContent = "⤓ vid";
-      vid.title = "record the selected cycle as mp4/webm (white background)";
-      vid.setAttribute("aria-label", "download " + m.name + " video");
-      vid.addEventListener("click", () => downloadCastVideo(m, sel.value, vid));
-      row.appendChild(sel); row.appendChild(dl); row.appendChild(vid);
+      dl.className = "btn cast__dl cast__exp"; dl.textContent = "⤓ export";
+      dl.title = "export the selected cycle in the chosen format";
+      dl.setAttribute("aria-label", "export " + m.name);
+      dl.addEventListener("click", () => exportAnimation(spec, m.name, sel.value, fmt.value, dl));
+      row.appendChild(sel); row.appendChild(fmt); row.appendChild(dl);
       tile.appendChild(rm); tile.appendChild(c); tile.appendChild(label); tile.appendChild(row);
       castGrid.appendChild(tile);
-      castPreviewTiles.push(previewTile);
-      drawCastPreviewTile(previewTile, 0);
     });
   }
 
-  // --- per-member PNG sequences (numbered frames, transparent bg) --------
-  // Each cycle is authored to loop seamlessly: body cycles use their integer
-  // tables; paint cycles map i/n onto one exact period of their motion.
-  const CAST_CYCLES = {
-    jump: 12, walk: 6, bob: 4, blink: 12, pulse: 24, sheen: 24, scan: 24,
-    // prototype motions
-    shake: 8, nod: 8, dance: 8, look: 12, sleep: 12, turnaround: 24, "side-step": 16, "orbit-glance": 16,
-    // combos sequence existing cycles back-to-back for production exports
-    greeting: 32, "idle-life": 56,
-  };
-  const CAST_COMBOS = {
-    greeting: ["look", "nod", "jump"],
-    "idle-life": ["bob", "bob", "bob", "bob", "blink", "look", "blink", "bob"],
-  };
+  // === per-animation exporters =========================================
+  // Every format is composed from the shared `motionFrame`, so PNG / SVG /
+  // WebM / MOV / HTML always render the exact same motion. pad 4 -> a safe
+  // margin and AE-friendly 512x512 frames at scale 32.
+  const EXPORT_PAD = 4;
 
-  function castFrame(spec, cycle, i, n) {
-    const combo = CAST_COMBOS[cycle];
-    if (combo) {
-      let cursor = 0;
-      for (const part of combo) {
-        const len = CAST_CYCLES[part];
-        if (i < cursor + len) return castFrame(spec, part, i - cursor, len);
-        cursor += len;
+  // One motion frame as a standalone SVG string. Applies the same body
+  // transform (dx/dy in cells, squashY vertical scale) the canvas renderer
+  // applies, so vector frames line up exactly with the raster ones.
+  function gridToSVG(grid, paint, scale, transform, pad) {
+    const t = transform || {}, dx = t.dx || 0, dy = t.dy || 0, sq = t.squashY == null ? 1 : t.squashY;
+    const p = pad || 0, dim = (8 + 2 * p) * scale;
+    let rects = "";
+    for (let y = 0; y < 8; y++)
+      for (let x = 0; x < 8; x++) {
+        const fill = cellFill(grid[y][x], paint, x, y);
+        if (!fill) continue;
+        const px = Math.round((x + p + dx) * scale);
+        const py = Math.round((y * sq + 8 * (1 - sq) + p + dy) * scale);
+        rects += `<rect x="${px}" y="${py}" width="${scale}" height="${Math.ceil(scale * sq)}" fill="${fill}"/>`;
       }
-      const fallback = combo[combo.length - 1];
-      return castFrame(spec, fallback, CAST_CYCLES[fallback] - 1, CAST_CYCLES[fallback]);
-    }
-    const fr = { gaze: spec.eyes.gaze || { dx: 0, dy: 0 }, blink: false };
-    let transform = null, paint = restPaint(spec);
-    const edgePaint = (turn) => {
-      const basePaint = restPaint(spec);
-      const mix = (hex, target, amt) => {
-        const rgb = (h) => [1, 3, 5].map((p) => parseInt(h.slice(p, p + 2), 16));
-        const a = rgb(hex), b = rgb(target);
-        return "#" + a.map((v, idx) => {
-          const n = Math.round(v + (b[idx] - v) * amt);
-          return ("0" + n.toString(16)).slice(-2);
-        }).join("");
-      };
-      return (x, y) => {
-        let col = basePaint(x, y);
-        if ((turn < 0 && x === 0) || (turn > 0 && x === 7)) col = mix(col, "#ffffff", 0.28);
-        if ((turn < 0 && x === 7) || (turn > 0 && x === 0)) col = mix(col, "#000000", 0.24);
-        return col;
-      };
-    };
-    if (cycle === "jump") {
-      const dyS = [0, -1, -2, -2, -1, 0, 0, 0, 0, 0, 0, 0];
-      const sqS = [1, 1, 1, 1, 1, 0.88, 1, 1, 1, 1, 1, 1];
-      transform = { dx: 0, dy: dyS[i], squashY: sqS[i] };
-    } else if (cycle === "walk") {
-      const dxS = [0, 1, 1, 0, -1, -1], dyS = [0, -1, 0, 0, -1, 0];
-      transform = { dx: dxS[i], dy: dyS[i], squashY: 1 };
-      fr.legShift = WALK_LEGS[i % WALK_LEGS.length];
-    } else if (cycle === "bob") {
-      transform = { dx: 0, dy: [0, 0, -1, -1][i], squashY: 1 };
-    } else if (cycle === "blink") {
-      fr.blink = [0, 0, 0, 0, 1, 2, 2, 1, 0, 0, 0, 0][i]; // ease shut, ease open
-    } else if (cycle === "pulse") {
-      paint = gradientPaint(hexes(spec), spec.gradientDir, "pulse", (i / n) * 2 * Math.PI * 22);
-    } else if (cycle === "sheen") {
-      paint = gradientPaint(hexes(spec), spec.gradientDir, "sheen", (i / n) * 56);
-    } else if (cycle === "scan") {
-      paint = gradientPaint(hexes(spec), spec.gradientDir, "scan-y", (i / n) * 36);
-    } else if (cycle === "shake") {
-      // quick "no" headshake
-      transform = { dx: [0, 1, 0, -1, 0, 1, 0, -1][i], dy: 0, squashY: 1 };
-    } else if (cycle === "nod") {
-      // double "yes" dip, gaze following the dip
-      const down = [0, 1, 1, 0, 0, 1, 1, 0][i];
-      transform = { dx: 0, dy: down, squashY: 1 };
-      fr.gaze = { dx: 0, dy: down ? 1 : 0 };
-    } else if (cycle === "dance") {
-      // sway side to side with a squash on each beat, feet planted
-      transform = {
-        dx: [0, 1, 1, 0, 0, -1, -1, 0][i],
-        dy: [0, -1, 0, 0, 0, -1, 0, 0][i],
-        squashY: [1, 0.88, 1, 1, 1, 0.88, 1, 1][i],
-      };
-      fr.legShift = [0, -1, -1, 0, 0, 1, 1, 0][i];
-    } else if (cycle === "look") {
-      // eyes-only glance to the side and back
-      fr.gaze = { dx: [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0][i], dy: 0 };
-    } else if (cycle === "sleep") {
-      // lids shut, slow breathing squash
-      fr.blink = 2;
-      transform = { dx: 0, dy: 0, squashY: [1, 1, 1, 0.94, 0.94, 0.94, 0.94, 0.94, 0.94, 1, 1, 1][i] };
-    } else if (cycle === "turnaround") {
-      // fake a 3D head turn: body slides, eyes track, and the near edge catches light.
-      const turns = [-1,-1,-1,-1,-1,-1, 0,0,0,0, 1,1,1,1,1,1, 0,0,0,0,0,0,0,0];
-      const turn = turns[i];
-      transform = { dx: turn, dy: [0,0,0,-1,-1,0,0,0,0,0,0,0,0,-1,-1,0,0,0,0,0,0,0,0,0][i], squashY: 1 };
-      fr.gaze = { dx: turn, dy: 0 };
-      if (turn) paint = edgePaint(turn);
-    } else if (cycle === "side-step") {
-      // travel sideways and back; feet counter-shift so it reads as stepping through space.
-      const dxS = [0,1,2,2,3,3,2,1,0,-1,-2,-2,-3,-3,-2,-1];
-      const dyS = [0,0,-1,0,0,-1,0,0,0,0,-1,0,0,-1,0,0];
-      transform = { dx: dxS[i], dy: dyS[i], squashY: 1 };
-      fr.gaze = { dx: dxS[i] > 0 ? 1 : dxS[i] < 0 ? -1 : 0, dy: 0 };
-      fr.legShift = [-1,-1,0,1,1,0,-1,-1,1,1,0,-1,-1,0,1,1][i];
-    } else if (cycle === "orbit-glance") {
-      // eyes orbit one way while the body sways the other, suggesting a tiny face turn.
-      const gazeX = [-1,-1,0,1,1,1,0,-1,-1,-1,0,1,1,0,-1,-1][i];
-      const gazeY = [0,-1,-1,-1,0,1,1,1,0,-1,-1,0,1,1,1,0][i];
-      transform = { dx: -gazeX, dy: gazeY > 0 ? 1 : 0, squashY: 1 };
-      fr.gaze = { dx: gazeX, dy: gazeY };
-      if (gazeX) paint = edgePaint(-gazeX);
-    }
-    return { grid: S.rasterize(spec, fr), paint, transform };
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${dim}" height="${dim}" ` +
+      `viewBox="0 0 ${dim} ${dim}" shape-rendering="crispEdges">${rects}</svg>`;
   }
 
-  function downloadCastSequence(member, cycle, scale = 32) {
-    const spec = specFromString(member.code);
-    if (!spec || !CAST_CYCLES[cycle]) return;
-    const n = CAST_CYCLES[cycle];
-    const safe = member.name.replace(/[^\w-]+/g, "_") || "critter";
-    const c = document.createElement("canvas");
+  // data URL -> raw bytes (for binary muxing).
+  function dataURLBytes(url) {
+    const bin = atob(url.slice(url.indexOf(",") + 1));
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  // --- numbered PNG / SVG sequences (transparent, one file per frame) ----
+  function downloadSequence(spec, safe, cycle, kind, scale) {
+    if (!CAST_CYCLES[cycle]) return;
+    scale = scale || 32;
+    const n = CAST_CYCLES[cycle], pad = EXPORT_PAD;
+    const c = kind === "png" ? document.createElement("canvas") : null;
     let i = 0;
     (function next() {
-      const f = castFrame(spec, cycle, i, n);
-      // pad 4 = safe space on every side: motion never grazes the frame edge,
-      // and 16x16 cells at scale 32 gives AE-friendly 512x512 frames
-      drawCanvas(c, f.grid, f.paint, scale, f.transform, 4);
+      const f = motionFrame(spec, cycle, i, n);
+      let href, ext;
+      if (kind === "svg") {
+        href = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(gridToSVG(f.grid, f.paint, scale, f.transform, pad));
+        ext = "svg";
+      } else {
+        drawCanvas(c, f.grid, f.paint, scale, f.transform, pad);
+        href = c.toDataURL("image/png"); ext = "png";
+      }
       const a = document.createElement("a");
-      a.download = `${safe}-${cycle}-${String(i).padStart(2, "0")}.png`;
-      a.href = c.toDataURL("image/png");
-      a.click();
+      a.download = `${safe}-${cycle}-${String(i).padStart(2, "0")}.${ext}`;
+      a.href = href; a.click();
       if (++i < n) setTimeout(next, 120); // spaced so the browser accepts the burst
     })();
   }
 
-  // --- per-member video capture (MediaRecorder; mp4 where supported) -----
-  // Video containers have no alpha channel, so frames are composited onto
-  // white; the PNG sequences remain the alpha-true export.
-  function recordCastVideo(member, cycle, opts) {
+  // --- transparent WebM (VP9/VP8 alpha; no white matte) ------------------
+  function recordTransparentWebM(spec, cycle, opts) {
     const { scale = 32, loops = 4, fps = 12 } = opts || {};
     return new Promise((resolve, reject) => {
-      const spec = specFromString(member.code);
-      if (!spec || !CAST_CYCLES[cycle]) return reject(new Error("unknown member or cycle"));
-      const n = CAST_CYCLES[cycle], pad = 4;
+      if (!CAST_CYCLES[cycle]) return reject(new Error("unknown cycle"));
+      const n = CAST_CYCLES[cycle], pad = EXPORT_PAD;
       const c = document.createElement("canvas");
       c.width = c.height = (8 + 2 * pad) * scale;
-      const ctx = c.getContext("2d");
-      const stream = c.captureStream(0); // we push frames explicitly
+      const ctx = c.getContext("2d", { alpha: true });
+      const stream = c.captureStream(0);
       const track = stream.getVideoTracks()[0];
-      const mime = MediaRecorder.isTypeSupported("video/mp4") ? "video/mp4"
-        : MediaRecorder.isTypeSupported("video/webm;codecs=vp9") ? "video/webm;codecs=vp9"
+      const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9") ? "video/webm;codecs=vp9"
+        : MediaRecorder.isTypeSupported("video/webm;codecs=vp8") ? "video/webm;codecs=vp8"
         : "video/webm";
       const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 8000000 });
       const chunks = [];
       rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
-      rec.onstop = () => resolve(new Blob(chunks, { type: mime.split(";")[0] }));
+      rec.onstop = () => resolve(new Blob(chunks, { type: "video/webm" }));
       rec.onerror = (e) => reject(e.error || new Error("recording failed"));
       rec.start();
       const tmp = document.createElement("canvas");
       const total = n * loops;
       let i = 0;
       (function tick() {
-        const f = castFrame(spec, cycle, i % n, n);
-        drawCanvas(tmp, f.grid, f.paint, scale, f.transform, pad);
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(0, 0, c.width, c.height);
+        const f = motionFrame(spec, cycle, i % n, n);
+        drawCanvas(tmp, f.grid, f.paint, scale, f.transform, pad); // transparent frame
+        ctx.clearRect(0, 0, c.width, c.height);
         ctx.imageSmoothingEnabled = false;
         ctx.drawImage(tmp, 0, 0);
         if (track.requestFrame) track.requestFrame();
@@ -1559,20 +1715,150 @@ globalThis.Sycritters = (function () {
     });
   }
 
-  function downloadCastVideo(member, cycle, btn) {
-    const label = btn.textContent;
-    btn.disabled = true; btn.textContent = "rec…";
-    recordCastVideo(member, cycle).then((blob) => {
-      const safe = member.name.replace(/[^\w-]+/g, "_") || "critter";
-      const ext = blob.type.includes("mp4") ? "mp4" : "webm";
-      const a = document.createElement("a");
-      a.download = `${safe}-${cycle}.${ext}`;
-      a.href = URL.createObjectURL(blob);
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-    }).catch((err) => console.warn("video capture failed:", err))
-      .finally(() => { btn.disabled = false; btn.textContent = label; });
+  // --- transparent MOV: pure-JS QuickTime muxer, 'png ' codec ------------
+  // Wraps the PNG frames (full alpha) in a QuickTime container with the PNG
+  // video codec — true-alpha .mov that opens in After Effects / Premiere /
+  // Resolve. Larger than a compressed codec, but lossless and dependency-free.
+  function framesToMOV(pngs, width, height, fps) {
+    const TS = 600, dur = Math.round(TS / fps), n = pngs.length;
+    const s2b = (s) => { const a = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) a[i] = s.charCodeAt(i); return a; };
+    const u32 = (v) => new Uint8Array([(v >>> 24) & 255, (v >>> 16) & 255, (v >>> 8) & 255, v & 255]);
+    const u16 = (v) => new Uint8Array([(v >>> 8) & 255, v & 255]);
+    const cat = (arrs) => { let len = 0; for (const a of arrs) len += a.length; const o = new Uint8Array(len); let p = 0; for (const a of arrs) { o.set(a, p); p += a.length; } return o; };
+    const atom = (type, ...parts) => { const body = cat(parts); return cat([u32(body.length + 8), s2b(type), body]); };
+    const matrix = cat([u32(0x00010000), u32(0), u32(0), u32(0), u32(0x00010000), u32(0), u32(0), u32(0), u32(0x40000000)]);
+
+    const mdat = atom("mdat", cat(pngs));
+    const ftyp = atom("ftyp", s2b("qt  "), u32(0x00000200), s2b("qt  "));
+    const chunkOffset = ftyp.length + 8; // first PNG sits right after the mdat header
+
+    const compressor = new Uint8Array(32);
+    { const cn = "PNG"; compressor[0] = cn.length; for (let i = 0; i < cn.length; i++) compressor[i + 1] = cn.charCodeAt(i); }
+    const visual = cat([
+      new Uint8Array(6), u16(1),                         // SampleEntry: reserved + data_ref_index
+      u16(0), u16(0), u32(0), u32(0), u32(0),            // pre_defined / reserved
+      u16(width), u16(height),
+      u32(0x00480000), u32(0x00480000),                  // 72dpi resolutions
+      u32(0), u16(1), compressor,
+      u16(32), u16(0xffff),                              // depth 32 (alpha) + pre_defined -1
+    ]);
+    const stsd = atom("stsd", u32(0), u32(1), atom("png ", visual));
+    const stts = atom("stts", u32(0), u32(1), u32(n), u32(dur));
+    const stsc = atom("stsc", u32(0), u32(1), u32(1), u32(n), u32(1));
+    const stsz = atom("stsz", u32(0), u32(0), u32(n), ...pngs.map((p) => u32(p.length)));
+    const stco = atom("stco", u32(0), u32(1), u32(chunkOffset));
+    const stbl = atom("stbl", stsd, stts, stsc, stsz, stco);
+    const vmhd = atom("vmhd", u32(0x00000001), u16(0), u16(0), u16(0), u16(0));
+    const dref = atom("dref", u32(0), u32(1), atom("url ", u32(0x00000001)));
+    const dinf = atom("dinf", dref);
+    const minf = atom("minf", vmhd, dinf, stbl);
+    const mdhd = atom("mdhd", u32(0), u32(0), u32(0), u32(TS), u32(n * dur), u16(0x55c4), u16(0));
+    const hname = "VideoHandler";
+    const hdlr = atom("hdlr", u32(0), s2b("mhlr"), s2b("vide"), u32(0), u32(0), u32(0), new Uint8Array([hname.length]), s2b(hname));
+    const mdia = atom("mdia", mdhd, hdlr, minf);
+    const tkhd = atom("tkhd", u32(0x00000007), u32(0), u32(0), u32(1), u32(0), u32(n * dur),
+      u32(0), u32(0), u16(0), u16(0), u16(0), u16(0), matrix, u32(width << 16), u32(height << 16));
+    const trak = atom("trak", tkhd, mdia);
+    const mvhd = atom("mvhd", u32(0), u32(0), u32(0), u32(TS), u32(n * dur), u32(0x00010000),
+      u16(0x0100), u16(0), u32(0), u32(0), matrix, u32(0), u32(0), u32(0), u32(0), u32(0), u32(0), u32(2));
+    const moov = atom("moov", mvhd, trak);
+    return cat([ftyp, mdat, moov]);
   }
+  function downloadMOV(spec, safe, cycle, scale) {
+    if (!CAST_CYCLES[cycle]) return;
+    scale = scale || 32;
+    const n = CAST_CYCLES[cycle], pad = EXPORT_PAD, dim = (8 + 2 * pad) * scale;
+    const c = document.createElement("canvas");
+    const pngs = [];
+    for (let i = 0; i < n; i++) {
+      const f = motionFrame(spec, cycle, i, n);
+      drawCanvas(c, f.grid, f.paint, scale, f.transform, pad);
+      pngs.push(dataURLBytes(c.toDataURL("image/png")));
+    }
+    const mov = framesToMOV(pngs, dim, dim, 12);
+    const a = document.createElement("a");
+    a.download = `${safe}-${cycle}.mov`;
+    a.href = URL.createObjectURL(new Blob([mov], { type: "video/quicktime" }));
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  }
+
+  // --- HTML/JS snippet: a self-contained player of one critter + motion --
+  function buildCritterSnippet(spec, cycle, name) {
+    const safe = (s) => s.replace(/<\/script>/gi, "<\\/script>");
+    const engineSrc = [...document.scripts].map((s) => s.textContent).find((t) => t.includes("globalThis.Sycritters ="));
+    const helpers = [restPaint, paintCells, drawCanvas, lerpPushPose, motionFrame].map((f) => f.toString()).join("\n\n");
+    const n = CAST_CYCLES[cycle] || 1;
+    return `<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8" /><title>${(name || "sycritter")} — ${cycle}</title>
+<style>html,body{margin:0;height:100%}body{display:grid;place-items:center;background:#fff}
+#sy{image-rendering:pixelated;width:256px;height:256px}</style></head>
+<body><canvas id="sy"></canvas>
+<script>
+${safe(engineSrc)}
+<\/script>
+<script>
+const S = globalThis.Sycritters;
+const { gradientPaint, cellFill } = S;
+const WALK_LEGS = ${JSON.stringify(WALK_LEGS)};
+const PAINT_CYCLE = ${JSON.stringify(PAINT_CYCLE)};
+const MOTION_DRIVES_EYES = new Set(${JSON.stringify([...MOTION_DRIVES_EYES])});
+const PUSH_HOLD = ${PUSH_HOLD}, PUSH_TRANS = ${PUSH_TRANS};
+const PUSH_POSE = ${JSON.stringify(PUSH_POSE)};
+const hexes = ${safe(hexes.toString())};
+${safe(helpers)}
+const SPEC = ${safe(JSON.stringify(spec))}, CYCLE = ${JSON.stringify(cycle)}, N = ${n}, FPS = 12;
+const cv = document.getElementById("sy");
+(function loop(t){
+  const frame = Math.floor((t || 0) / (1000 / FPS));
+  const f = motionFrame(SPEC, CYCLE, frame % N, N);
+  drawCanvas(cv, f.grid, f.paint, 32, f.transform, 4);
+  requestAnimationFrame(loop);
+})();
+<\/script>
+</body>
+</html>
+`;
+  }
+  function downloadSnippet(spec, safe, cycle, name) {
+    const html = buildCritterSnippet(spec, cycle, name || safe);
+    const a = document.createElement("a");
+    a.download = `${safe}-${cycle}.html`;
+    a.href = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+    a.click();
+    if (navigator.clipboard) navigator.clipboard.writeText(html).catch(() => {});
+  }
+
+  // Dispatch one (spec, cycle) to a chosen export format. `btn` (optional) is
+  // disabled + relabelled while async formats (WebM) record.
+  function exportAnimation(spec, name, cycle, format, btn) {
+    const safe = (name || "critter").replace(/[^\w-]+/g, "_") || "critter";
+    if (!spec || !CAST_CYCLES[cycle]) return;
+    if (format === "png-seq") return downloadSequence(spec, safe, cycle, "png");
+    if (format === "svg-seq") return downloadSequence(spec, safe, cycle, "svg");
+    if (format === "mov") return downloadMOV(spec, safe, cycle);
+    if (format === "html") return downloadSnippet(spec, safe, cycle, name);
+    if (format === "webm") {
+      const label = btn && btn.textContent;
+      if (btn) { btn.disabled = true; btn.textContent = "rec…"; }
+      return recordTransparentWebM(spec, cycle).then((blob) => {
+        const a = document.createElement("a");
+        a.download = `${safe}-${cycle}.webm`;
+        a.href = URL.createObjectURL(blob); a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      }).catch((err) => console.warn("webm capture failed:", err))
+        .finally(() => { if (btn) { btn.disabled = false; btn.textContent = label; } });
+    }
+  }
+  // user-facing format list (value -> dropdown label), shared by both UIs
+  const EXPORT_FORMATS = [
+    { value: "png-seq", label: "PNG seq (α)" },
+    { value: "svg-seq", label: "SVG seq" },
+    { value: "webm",    label: "WebM (α)" },
+    { value: "mov",     label: "MOV (α)" },
+    { value: "html",    label: "HTML" },
+  ];
 
   // --- cast handoff: JSON dump + a standalone cast page ------------------
   function downloadCastDump() {
@@ -1592,8 +1878,9 @@ globalThis.Sycritters = (function () {
     const safe = (s) => s.replace(/<\/script>/gi, "<\\/script>");
     const engineSrc = [...document.scripts].map((s) => s.textContent)
       .find((t) => t.includes("globalThis.Sycritters ="));
-    const helpers = [restPaint, paintCells, drawCanvas, castFrame,
-      downloadCastSequence, recordCastVideo, downloadCastVideo]
+    const helpers = [restPaint, paintCells, drawCanvas, lerpPushPose, motionFrame,
+      gridToSVG, dataURLBytes, downloadSequence, recordTransparentWebM,
+      framesToMOV, downloadMOV, buildCritterSnippet, downloadSnippet, exportAnimation]
       .map((f) => f.toString()).join("\n\n");
     return `<!doctype html>
 <html lang="en">
@@ -1618,7 +1905,7 @@ globalThis.Sycritters = (function () {
 </head>
 <body>
 <h1>SY<b>CRITTERS</b> — video cast</h1>
-<p class="hint">png sequences: transparent 512&times;512 @ 12fps &middot; videos: mp4/webm on white</p>
+<p class="hint">per critter: PNG / SVG sequence &middot; transparent WebM &amp; MOV &middot; standalone HTML &middot; 512&times;512 @ 12fps</p>
 <div id="cast" class="grid"></div>
 <script>
 ${safe(engineSrc)}
@@ -1628,7 +1915,12 @@ const S = globalThis.Sycritters;
 const { gradientPaint, cellFill, specFromString } = S;
 const WALK_LEGS = ${JSON.stringify(WALK_LEGS)};
 const CAST_CYCLES = ${JSON.stringify(CAST_CYCLES)};
-const CAST_COMBOS = ${JSON.stringify(CAST_COMBOS)};
+const PAINT_CYCLE = ${JSON.stringify(PAINT_CYCLE)};
+const MOTION_DRIVES_EYES = new Set(${JSON.stringify([...MOTION_DRIVES_EYES])});
+const EXPORT_PAD = 4;
+const EXPORT_FORMATS = ${JSON.stringify(EXPORT_FORMATS)};
+const PUSH_HOLD = ${PUSH_HOLD}, PUSH_TRANS = ${PUSH_TRANS};
+const PUSH_POSE = ${JSON.stringify(PUSH_POSE)};
 const hexes = ${safe(hexes.toString())};
 ${safe(helpers)}
 const CAST = ${safe(JSON.stringify(loadCast()))};
@@ -1641,13 +1933,13 @@ for (const m of CAST) {
   const name = document.createElement("div"); name.className = "name"; name.textContent = m.name;
   const sel = document.createElement("select");
   for (const k of Object.keys(CAST_CYCLES)) { const o = document.createElement("option"); o.value = k; o.textContent = k; sel.appendChild(o); }
+  const fmt = document.createElement("select");
+  for (const f of EXPORT_FORMATS) { const o = document.createElement("option"); o.value = f.value; o.textContent = f.label; fmt.appendChild(o); }
   const row = document.createElement("div"); row.className = "row";
-  const seq = document.createElement("button"); seq.textContent = "\\u2913 png seq";
-  seq.addEventListener("click", () => downloadCastSequence(m, sel.value));
-  const vid = document.createElement("button"); vid.textContent = "\\u2913 video";
-  vid.addEventListener("click", () => downloadCastVideo(m, sel.value, vid));
-  row.appendChild(seq); row.appendChild(vid);
-  tile.appendChild(c); tile.appendChild(name); tile.appendChild(sel); tile.appendChild(row);
+  const exp = document.createElement("button"); exp.textContent = "\\u2913 export";
+  exp.addEventListener("click", () => exportAnimation(spec, m.name, sel.value, fmt.value, exp));
+  row.appendChild(sel); row.appendChild(fmt); row.appendChild(exp);
+  tile.appendChild(c); tile.appendChild(name); tile.appendChild(row);
   host.appendChild(tile);
   live.push({ spec, sel, canvas: c });
 }
@@ -1655,7 +1947,7 @@ for (const m of CAST) {
   const frame = Math.floor((t || 0) / (1000 / FPS));
   for (const v of live) {
     const n = CAST_CYCLES[v.sel.value];
-    const f = castFrame(v.spec, v.sel.value, frame % n, n);
+    const f = motionFrame(v.spec, v.sel.value, frame % n, n);
     drawCanvas(v.canvas, f.grid, f.paint, 10, f.transform, 4);
   }
   requestAnimationFrame(loop);
