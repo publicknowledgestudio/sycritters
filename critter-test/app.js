@@ -102,15 +102,12 @@
   }
   // Which edge/corner the pupils sit on, from the pointer direction (and body flip).
   function pupilDir(geo, flip) {
-    if (!mouseIn) return "D";
+    if (!mouseIn) return "R";                    // resting -> a forward 2px bar
     const mvx = mx - geo.cx, mvy = my - geo.cy;
-    const ax = Math.abs(mvx), ay = Math.abs(mvy);
     let h = mvx < 0 ? "L" : "R";
-    if (flip) h = h === "L" ? "R" : "L";        // the body mirror swaps left/right
-    if (ax > ay) return h;                       // mostly horizontal -> 2px vertical bar
-    const v = mvy < 0 ? "U" : "D";
-    if (ax < ay * 0.4) return v;                 // mostly vertical -> 2px horizontal bar
-    return v + h;                                // diagonal -> 1px corner (e.g. top-right)
+    if (flip) h = h === "L" ? "R" : "L";         // the body mirror swaps left/right
+    if (Math.abs(mvx) > Math.abs(mvy)) return h; // left/right -> ALWAYS a 2px vertical bar
+    return (mvy < 0 ? "U" : "D") + h;            // up/down -> a 1px corner dot (never a 2px bar)
   }
   function applySpec(next) {
     spec = force2x2Eyes(next);
@@ -224,7 +221,7 @@
       return "react";
     }
     if (moused && !busy && geo.d >= JUMP_LO && geo.d <= JUMP_HI && (t - lastJumpEnd) > JUMP_COOLDOWN) {
-      startJump(t, mx - geo.r.left - SPRITE_W / 2);          // run up and leap to land under the mouse
+      startJump(t, mx - geo.r.left - SPRITE_W / 2, Math.max(0, geo.r.top - my));  // land under the mouse; arc scales with cursor height
       return "jump";
     }
     if (moused && geo.d < ENGAGE_R) return "follow";        // mouse in the zone -> follow it
@@ -244,17 +241,19 @@
   // A running jump: a short ground run-up that builds speed, then a ballistic arc
   // that lands on the edge under the mouse. A big arc tumbles on landing; a small
   // one skids with dust.
-  function startJump(t, landTargetX) {
+  function startJump(t, landTargetX, heightAbove) {
     const b = bounds();
     const startX = x;
     const landX = clamp(landTargetX, b.min, b.max);
     const dir = Math.sign(landX - startX) || facing || 1;
     const launchX = clamp(startX + dir * Math.min(Math.abs(landX - startX) * 0.3, 24), b.min, b.max);
     const airDist = Math.abs(landX - launchX);
-    const peak = clamp(airDist * 0.55 + 8, 8, 64);           // farther leap -> higher arc
-    const tumble = peak > 34;                                // high -> tumble; low -> skid
-    const runupDur = 200, airDur = clamp(airDist * 2.4, 280, 760), landDur = tumble ? 520 : 420;
-    jump = { t0: t, startX, launchX, landX, dir, runupDur, airDur, peak, tumble, landDur, landT: 0, landSpawned: false, dur: runupDur + airDur + landDur };
+    // arc height grows with the leap distance AND how high the cursor is — but it always
+    // lands back on the edge (a real parabola, never a vertical drop into a glass wall).
+    const peak = clamp(airDist * 0.4 + (heightAbove || 0) * 0.7 + 8, 10, 92);
+    const tumble = peak > 40;                                // high arc -> tumble; low -> skid
+    const runupDur = 200, airDur = clamp(airDist * 2.2 + peak * 2, 300, 900), landDur = tumble ? 560 : 420;
+    jump = { t0: t, startX, launchX, landX, dir, runupDur, airDur, peak, tumble, overshoot: tumble ? 26 : 0, landDur, landT: 0, landSpawned: false, dur: runupDur + airDur + landDur };
     facing = dir;
   }
 
@@ -274,6 +273,23 @@
       if (age > 0.42) { dust.splice(i, 1); continue; }
       ctx.globalAlpha = Math.max(0, 1 - age / 0.42) * 0.55;
       ctx.fillRect(Math.round(d.x + d.vx * age), Math.round(d.y + d.vy * age + 110 * age * age), CELL, CELL);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // teleport: sink into a rainbow portal line-by-line, pause, then drop from one nearby
+  let teleport = null;
+  function startTeleport(t) {
+    const b = bounds();
+    const off = (Math.random() < 0.5 ? -1 : 1) * (44 + Math.random() * 40);
+    teleport = { t0: t, fromX: x, toX: clamp(x + off, b.min, b.max), sinkDur: 440, pauseDur: 240, dropDur: 300, dur: 980 };
+  }
+  function drawRainbow(t) {
+    const yb = SPRITE_H - CELL, cols = 9, x0 = Math.round(SPRITE_W / 2 - cols * CELL / 2);
+    for (let i = 0; i < cols; i++) {
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = "hsl(" + ((i * 40 + t * 0.5) % 360) + ",95%,58%)";
+      ctx.fillRect(x0 + i * CELL, yb, CELL, CELL);
     }
     ctx.globalAlpha = 1;
   }
@@ -310,13 +326,18 @@
       } else {                                              // landing
         const le = t - jump.landT;
         if (jump.tumble) {
-          rot = Math.floor(le / (jump.landDur / 4)) % 4;    // a quick forward roll, 90deg steps
-          lift = -10 * Math.max(0, Math.sin(Math.PI * le / jump.landDur));
-          T.squashY = le > jump.landDur - 90 ? 1 : 0.92;
+          const r = Math.floor(Math.abs(x - jump.landX) / (CELL * 1.5));     // a quarter-roll per ~1.5 cells travelled
+          rot = jump.dir > 0 ? (r % 4) : ((4 - r % 4) % 4);                  // roll in the direction of travel
+          T.squashY = le < 60 ? 0.72 : 1;                                    // impact squash, then upright — stays on the ground
         } else {
           T.squashY = le < 90 ? 0.66 : le < 200 ? 0.88 : 1; // skid: squash low, then recover
         }
       }
+    } else if (state === "teleport") {
+      const e = t - teleport.t0;
+      if (e < teleport.sinkDur) T.dy = (e / teleport.sinkDur) * 8;                  // sink line-by-line (clips at the ground)
+      else if (e < teleport.sinkDur + teleport.pauseDur) T.dy = 9;                  // fully under
+      else { const k = clamp((e - teleport.sinkDur - teleport.pauseDur) / teleport.dropDur, 0, 1); T.dy = -(1 - k) * 5; if (k > 0.86) T.squashY = 0.85; }  // drop from a slight height onto the portal
     } else if (state === "react") {                         // a "caught you!" celebration
       const fr = Math.floor((t - react.t0) / (1000 / 12));
       if (react.kind === "excited") {
@@ -345,7 +366,7 @@
     } else { // rest: dormant at home, with an occasional glance/bob
       if (t < restAnimUntil && restAnim === "bob") T.dy = [0, -1, -1, 0][Math.floor((t - restAnimStart) / 90) % 4];
     }
-    return { legShift, T, p, lift, flipOverride, rot, animated: state === "shimmer" || state === "celebrate" || state === "react" || state === "jump" };
+    return { legShift, T, p, lift, flipOverride, rot, animated: state === "shimmer" || state === "celebrate" || state === "react" || state === "jump" || state === "teleport" };
   }
 
   /* ---- the loop -------------------------------------------------------- */
@@ -360,12 +381,19 @@
     const state = decide(t, geo);
     const b = bounds();
 
-    if (state === "jump") {
+    if (state === "teleport") {
+      const e = t - teleport.t0;                              // disappear at fromX, reappear at toX
+      x = e < teleport.sinkDur + teleport.pauseDur ? teleport.fromX : teleport.toX;
+    } else if (state === "jump") {
       // run-up on the ground (accelerate) -> ballistic arc -> land under the mouse
       const e = t - jump.t0, air0 = jump.runupDur, air1 = air0 + jump.airDur;
       if (e < air0) { const k = e / air0; x = jump.startX + (jump.launchX - jump.startX) * k * k; legPhase = Math.floor(e / 45) % 4; }
       else if (e < air1) { x = jump.launchX + (jump.landX - jump.launchX) * (e - air0) / jump.airDur; }
-      else { x = jump.landX; if (!jump.landSpawned) { jump.landSpawned = true; jump.landT = t; spawnDust(t, jump.dir, jump.tumble ? 4 : 8); } }
+      else {
+        if (!jump.landSpawned) { jump.landSpawned = true; jump.landT = t; spawnDust(t, jump.dir, jump.tumble ? 6 : 8); }
+        const k = clamp((t - jump.landT) / jump.landDur, 0, 1);
+        x = jump.landX + jump.dir * jump.overshoot * (1 - (1 - k) * (1 - k));   // tumble keeps rolling forward, past the mouse
+      }
       facing = jump.dir;
     } else {
       // target x
@@ -418,6 +446,7 @@
     if (ps.animated || hasDust || drawKey !== lastDrawKey) {     // repaint when the sprite/dust changes
       paint(grid, ps.p, ps.T, flip, ps.rot);
       if (hasDust) drawDust(t);
+      if (state === "teleport") drawRainbow(t);
       lastDrawKey = drawKey;
       perfSum += now() - a; perfN++;
     }
@@ -544,6 +573,7 @@
     ["What is Sycamore?", "Sycamore helps you build enterprise-grade apps and agents from a conversation. Describe what you need — like the prospect map above — and it assembles a live, editable, shareable app."],
     ["How do I build an agent?", "Describe the agent's job and the tools it should use, and Sycamore wires it up. Refine it in plain language, then ship when it's ready."],
     ["Who is the critter?", "That is your companion! It lives on the composer, watches your cursor, and reacts when you reach it. Open the gear in its menu to restyle it."],
+    ["Share feedback", "I'd love to hear it — type your feedback below and I'll pass it straight to the team."],
   ];
   const chatLog = document.getElementById("chatLog");
   const chatInput = document.getElementById("chatInput");
@@ -558,7 +588,7 @@
   function answer(q) {
     addMsg("me", q);
     const hit = FAQ.find(([question]) => question.toLowerCase() === q.toLowerCase());
-    setTimeout(() => addMsg("bot", hit ? hit[1] : "Good question! Open the Sycamore docs from the top-right menu, or a teammate can jump into the shared session to help."), 260);
+    setTimeout(() => addMsg("bot", hit ? hit[1] : "Thanks — I've noted that and passed it along to the team. Anything else I can help with?"), 260);
   }
   function seedChat() {
     addMsg("bot", "Hello! I am your personal help agent. Ask me anything about building enterprise grade apps and agents with Sycamore.");
@@ -573,7 +603,12 @@
   function openChat() {
     chatOpen = true; lastInteraction = now(); toolsShown = false; critTools.classList.remove("show");
     if (!chatSeeded) { seedChat(); chatSeeded = true; }
-    chatpop.classList.add("open"); wake();
+    chatpop.classList.add("open");
+    const box = critterScreenBox();              // open ABOVE the critter, not over it
+    chatpop.style.right = "auto"; chatpop.style.bottom = "auto";
+    chatpop.style.left = clamp(box.x + box.w / 2 - chatpop.offsetWidth / 2, 8, innerWidth - chatpop.offsetWidth - 8) + "px";
+    chatpop.style.top = Math.max(8, box.y - 12 - chatpop.offsetHeight) + "px";
+    wake();
   }
   function closeChat() { chatOpen = false; chatpop.classList.remove("open"); wake(); }
   document.getElementById("chatX").addEventListener("click", closeChat);
@@ -584,14 +619,6 @@
   const seedInput = document.getElementById("seedInput");
   document.getElementById("dice").addEventListener("click", () => applySpec(generate(randSeed())));
   seedInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); if (seedInput.value.trim()) applySpec(generate(seedInput.value.trim())); } });
-
-  // settings popup: ask for feedback
-  const fbThanks = document.getElementById("fbThanks");
-  const fbInput = document.getElementById("fbInput");
-  function sendFeedback() { fbThanks.textContent = "Thanks for the feedback!"; fbInput.value = ""; }
-  document.querySelectorAll(".fbbtn").forEach((b) => b.addEventListener("click", sendFeedback));
-  document.getElementById("fbSend").addEventListener("click", sendFeedback);
-  fbInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); sendFeedback(); } });
   pop.addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-step]");
     if (!btn) return;
@@ -629,9 +656,10 @@
     forced = null; demoTarget = null; jump = null; react = null;
     const b = bounds();
     if (kind === "walk") { demoTarget = (x > (b.min + b.max) / 2) ? b.min : b.max; forced = { state: "demowalk", until: t + 2600 }; }
-    else if (kind === "jump") { startJump(t, x + (x > (b.min + b.max) / 2 ? -90 : 90)); forced = { state: "jump", until: t + jump.dur }; }
+    else if (kind === "jump") { startJump(t, x + (x > (b.min + b.max) / 2 ? -90 : 90), 40); forced = { state: "jump", until: t + jump.dur }; }
     else if (REACT_DUR[kind]) { react = { kind, t0: t, dur: REACT_DUR[kind] }; }
     else if (kind === "shimmer") { forced = { state: "shimmer", until: t + 1350 }; }  // ~2 sheen sweeps
+    else if (kind === "teleport") { startTeleport(t); forced = { state: "teleport", until: t + teleport.dur }; }
     else if (kind === "celebrate") { celebrateUntil = t + 1300; }
     else if (kind === "sleep") { lastInteraction = t - SLEEP_AFTER - 4000; forced = { state: "sleep", until: t + 4000 }; restAnim = "breath"; restAnimStart = t; restAnimUntil = t + 4000; }
     else if (kind === "blink") { blinkStart = t; }
