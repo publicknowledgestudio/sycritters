@@ -125,7 +125,7 @@
     const dx = t.dx || 0, dy = t.dy || 0;
     const sq = t.squashY == null ? 1 : t.squashY;
     const sqx = t.squashX == null ? 1 : t.squashX;   // horizontal squash (kept for general use)
-    const w = Math.max(1, Math.ceil(CELL * sqx));
+    const w = Math.max(1, Math.ceil(CELL * sqx)), clipTop = t.clipTop || 0;
     rot = (rot || 0) & 3;                             // 90deg rotation steps (tumble roll)
     ctx.clearRect(0, 0, SPRITE_W, SPRITE_H);
     for (let y = 0; y < 8; y++)
@@ -140,6 +140,7 @@
         ctx.fillStyle = fill;
         const px = Math.round((3.5 + (x - 3.5) * sqx + PAD_SIDE + dx) * CELL);  // scale about the centre
         const py = Math.round((y * sq + 8 * (1 - sq) + PAD_TOP + dy) * CELL);
+        if (clipTop && py < clipTop) continue;       // hide rows still "inside" the portal
         ctx.fillRect(px, py, w, Math.ceil(CELL * sq));
       }
   }
@@ -186,7 +187,12 @@
     thinkUntil = t + 2400;        // then "thinking" about the answer
     wake();
   }
-  ta.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } });
+  ta.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); return; }
+    if (["Shift", "Control", "Alt", "Meta"].includes(e.key)) return;
+    react = { kind: "keystroke", t0: now(), dur: REACT_DUR.keystroke };   // a single nod on each keystroke
+    lastInteraction = now(); wake();
+  });
   document.getElementById("send").addEventListener("click", submit);
 
   // eyes blink on a global timer (~every 4s while engaged); at rest a 30s timer wakes one.
@@ -201,7 +207,7 @@
   const JUMP_LO = 45, JUMP_HI = 80;  // from this mid-range it can leap toward the mouse
   const JUMP_COOLDOWN = 1100; // ms between leaps
   const REACT_COOLDOWN = 2000;// ms between celebrations while the cursor lingers
-  const REACT_DUR = { excited: 900, wiggle: 760, dance: 1000, nod: 720 };
+  const REACT_DUR = { excited: 900, wiggle: 760, dance: 1000, nod: 720, keystroke: 360 };
   const MAX_WALK = 165;       // px/s — and it SPEEDS UP as it nears the mouse
   const RETURN_SPEED = 90;    // px/s strolling back home
   const REST_ANIM_MS = 10000; // a small idle animation roughly every 10s
@@ -211,8 +217,8 @@
   function decide(t, geo) {
     if (forced) { if (t < forced.until) return forced.state; forced = null; demoTarget = null; }
     if (t < celebrateUntil) return "celebrate";
-    if (document.activeElement === ta && (t - lastType < 2500 || t < thinkUntil)) return "shimmer";
     if (react) { if (t - react.t0 >= react.dur) { react = null; lastReactEnd = t; } else return "react"; }
+    if (document.activeElement === ta && (t - lastType < 2500 || t < thinkUntil)) return "shimmer";
     if (jump)  { if (t - jump.t0  >= jump.dur)  { jump  = null; lastJumpEnd  = t; } else return "jump"; }
     const moused = mouseIn && (t - mouseMoved) < 2000;
     const busy = toolsShown || chatOpen || popupOpen;       // a panel is up -> stay calm
@@ -250,10 +256,10 @@
     const airDist = Math.abs(landX - launchX);
     // arc height grows with the leap distance AND how high the cursor is — but it always
     // lands back on the edge (a real parabola, never a vertical drop into a glass wall).
-    const peak = clamp(airDist * 0.3 + (heightAbove || 0) * 0.5 + 6, 8, 64);  // gentler, less exaggerated arc
-    const tumble = peak > 38;                                // high arc -> tumble; low -> skid
-    const runupDur = 240, airDur = clamp(airDist * 3 + peak * 2, 460, 1100), landDur = tumble ? 600 : 440;  // a touch slower
-    jump = { t0: t, startX, launchX, landX, dir, runupDur, airDur, peak, tumble, overshoot: tumble ? 22 : 0, landDur, landT: 0, landSpawned: false, dur: runupDur + airDur + landDur };
+    const peak = clamp(airDist * 0.35 + (heightAbove || 0) * 0.6 + 7, 9, 78);  // arc ~halfway between old and new
+    const tumble = peak > 39;                                // high arc -> tumble; low -> skid
+    const runupDur = 220, airDur = clamp(airDist * 2.6 + peak * 2, 380, 1000), landDur = tumble ? 580 : 430;
+    jump = { t0: t, startX, launchX, landX, dir, runupDur, airDur, peak, tumble, overshoot: tumble ? 24 : 0, landDur, landT: 0, landSpawned: false, dur: runupDur + airDur + landDur };
     facing = dir;
   }
 
@@ -337,7 +343,7 @@
       const e = t - teleport.t0;
       if (e < teleport.sinkDur) T.dy = (e / teleport.sinkDur) * 8;                  // sink line-by-line (clips at the ground)
       else if (e < teleport.sinkDur + teleport.pauseDur) T.dy = 9;                  // fully under
-      else { const k = clamp((e - teleport.sinkDur - teleport.pauseDur) / teleport.dropDur, 0, 1); T.dy = -9 * (1 - k * k); if (k > 0.9) T.squashY = 0.8; }  // fall from a height onto the portal (accelerating)
+      else { const k = clamp((e - teleport.sinkDur - teleport.pauseDur) / teleport.dropDur, 0, 1); T.dy = -9 * (1 - k * k); T.clipTop = SPRITE_H - 10 * CELL; if (k > 0.9) T.squashY = 0.8; }  // emerge line-by-line below the portal as it descends
     } else if (state === "react") {                         // a "caught you!" celebration
       const fr = Math.floor((t - react.t0) / (1000 / 12));
       if (react.kind === "excited") {
@@ -357,6 +363,8 @@
         legShift = [0, -1, -1, 0, 0, 1, 1, 0][k];
       } else if (react.kind === "nod") {
         T.dy = [0, 1, 1, 0, 0, 1, 1, 0][fr % 8];
+      } else if (react.kind === "keystroke") {
+        T.dy = [0, 1, 1, 0][Math.min(fr, 3)];   // a single nod
       }
     } else if (state === "follow" || state === "return" || state === "demowalk") {
       legShift = [-1, 0, 1, 0][legPhase];                   // feet step; no vertical bob
