@@ -313,7 +313,7 @@
       T.squashY = [0.9, 1, 0.9, 1, 0.9, 1, 0.9, 1][k];
       p = gradientPaint(hexes(), spec.gradientDir, "sheen", t / 12);
     } else if (state === "shimmer") {
-      p = gradientPaint(hexes(), spec.gradientDir, "sheen", t / 12);  // a light shimmer sweep
+      p = gradientPaint(hexes(), spec.gradientDir, "sheen", t / 24);  // a slow light shimmer sweep
     } else if (state === "jump") {
       const e = t - jump.t0, air0 = jump.runupDur, air1 = air0 + jump.airDur;
       if (e < air0) {                                       // run-up: build speed, crouch to launch
@@ -657,8 +657,9 @@
     const b = bounds();
     if (kind === "walk") { demoTarget = (x > (b.min + b.max) / 2) ? b.min : b.max; forced = { state: "demowalk", until: t + 2600 }; }
     else if (kind === "jump") { startJump(t, x + (x > (b.min + b.max) / 2 ? -90 : 90), 40); forced = { state: "jump", until: t + jump.dur }; }
+    else if (kind === "skid") { startJump(t, x + (x > (b.min + b.max) / 2 ? -44 : 44), 0); forced = { state: "jump", until: t + jump.dur }; }
     else if (REACT_DUR[kind]) { react = { kind, t0: t, dur: REACT_DUR[kind] }; }
-    else if (kind === "shimmer") { forced = { state: "shimmer", until: t + 1350 }; }  // ~2 sheen sweeps
+    else if (kind === "shimmer") { forced = { state: "shimmer", until: t + 2700 }; }  // ~2 slow sweeps
     else if (kind === "teleport") { startTeleport(t); forced = { state: "teleport", until: t + teleport.dur }; }
     else if (kind === "celebrate") { celebrateUntil = t + 1300; }
     else if (kind === "sleep") { lastInteraction = t - SLEEP_AFTER - 4000; forced = { state: "sleep", until: t + 4000 }; restAnim = "breath"; restAnimStart = t; restAnimUntil = t + 4000; }
