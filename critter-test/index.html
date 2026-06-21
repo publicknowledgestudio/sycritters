@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Critter Test — a critter that lives on your composer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Afacad+Flux:wght@100..1000&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar__title">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="7" height="16" rx="1.5"/><rect x="14" y="4" width="7" height="16" rx="1.5"/></svg>
+      Interactive Prospect Map
+    </div>
+    <div class="topbar__right">
+      <div class="avatars">
+        <span class="av" style="background:linear-gradient(135deg,#c94f3d,#e7a07a)"></span>
+        <span class="av" style="background:linear-gradient(135deg,#8a8f98,#cfd3da)"></span>
+        <span class="av" style="background:linear-gradient(135deg,#2c2c2e,#6b6b70)"></span>
+      </div>
+      <span class="plus5">+5</span>
+      <button class="sharebtn" title="Share">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.2 10.8 15.8 7.2M8.2 13.2l7.6 3.6"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="convo">
+    <div class="convo__inner">
+      <div class="day">TODAY</div>
+      <div class="row-right">
+        <div class="bubble">Build the interactive prospect map with the companies we have now, color-coded by stage, and make it clickable to see deal size and next steps. That sounds awesome.</div>
+      </div>
+      <div class="stamp"><span class="av"></span></div>
+      <div class="stamp"><span class="time">13:31</span></div>
+      <div class="row-left">
+        <div class="bubble bubble--bot">
+          <span class="lead">A little critter lives on the top edge of this box. Here's its repertoire:</span>
+          <ul class="anims">
+            <li><span class="k">Rests</span> sits at home (top-right) and <b>blinks / glances</b> every ~30s while you're away.</li>
+            <li><span class="k">Follows</span> when your cursor comes within ~100px it walks over, <b>speeding up as it gets closer</b>.</li>
+            <li><span class="k">Leaps</span> from a short distance it <b>jumps toward your cursor</b> to close the gap.</li>
+            <li><span class="k">Catches you</span> when it reaches your cursor it does a <b>random celebration</b> — hop, wiggle, dance, nod or spin.</li>
+            <li><span class="k">Thinks</span> peers down and <b>colour-pulses</b> while you type in the composer.</li>
+            <li><span class="k">Celebrates</span> a happy <b>hop</b> when you press Enter.</li>
+            <li><span class="k">Returns</span> strolls back home when your cursor leaves, then goes dormant.</li>
+            <li><span class="k">Customise</span> <b>click the critter</b> for a small popup (seed, top, bottom, colour).</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div class="dock">
+    <div class="composer" id="composer">
+      <canvas id="critter" aria-hidden="true"></canvas>
+      <textarea id="ta" rows="1" placeholder="Ask for changes or discuss a new idea entirely&hellip;"></textarea>
+      <div class="composer__row">
+        <div class="composer__left">
+          <button class="iconbtn" title="Add">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+        </div>
+        <div class="composer__right">
+          <button class="iconbtn" title="Dictate">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6 11a6 6 0 0 0 12 0M12 17v3"/></svg>
+          </button>
+          <button class="send" id="send" title="Send"><span class="sq"></span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="disclaimer">Forge can make mistakes. Verify important outputs.</div>
+
+  <div class="crit-tools" id="critTools">
+    <button class="crit-tools__btn" id="toolChat" title="Forge help"><i class="ph ph-chat-circle"></i></button>
+    <button class="crit-tools__btn" id="toolSettings" title="Critter settings"><i class="ph ph-gear-six"></i></button>
+  </div>
+  <div class="hint" id="hint">hover me</div>
+
+  <div class="pop" id="pop">
+    <div class="pop__head"><span class="pop__title">Customise critter</span><button class="pop__x" id="popX" title="Close">&times;</button></div>
+    <div class="pop__seed"><input id="seedInput" spellcheck="false" /><button class="dice" id="dice" title="Random critter">&#127922;</button></div>
+    <div class="pop__row"><span class="pop__label">Top</span><span class="stepper"><button data-step="top" data-dir="-1">&lsaquo;</button><span class="val" id="valTop">dome</span><button data-step="top" data-dir="1">&rsaquo;</button></span></div>
+    <div class="pop__row"><span class="pop__label">Bottom</span><span class="stepper"><button data-step="bottom" data-dir="-1">&lsaquo;</button><span class="val" id="valBottom">flat</span><button data-step="bottom" data-dir="1">&rsaquo;</button></span></div>
+    <div class="pop__row"><span class="pop__label">Colour</span><span class="stepper"><button data-step="color" data-dir="-1">&lsaquo;</button><span class="val swatches" id="valColor"></span><button data-step="color" data-dir="1">&rsaquo;</button></span></div>
+  </div>
+
+  <div class="chatpop" id="chatpop">
+    <div class="chatpop__head">
+      <span class="chatpop__title"><i class="ph ph-sparkle"></i> Forge by Sycamore</span>
+      <button class="chatpop__x" id="chatX" title="Close">&times;</button>
+    </div>
+    <div class="chatpop__log" id="chatLog"></div>
+    <div class="chatpop__chips" id="chatChips"></div>
+    <div class="chatpop__input">
+      <input id="chatInput" placeholder="Ask about Forge&hellip;" spellcheck="false" />
+      <button id="chatSend" title="Send"><i class="ph ph-paper-plane-right"></i></button>
+    </div>
+  </div>
+
+  <div class="perf" id="perf">measuring critter cost&hellip;</div>
+
+<script src="sycritters-engine.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
