@@ -16,10 +16,10 @@
 
   /* ---- geometry: the critter is an 8x8 sprite drawn at CELL px/cell ---- */
   const CELL = 4;          // device px per critter pixel (smaller critter)
-  const PAD_TOP = 6;       // headroom cells above the body (bob / squash overshoot)
+  const PAD_TOP = 10;      // headroom cells above the body (bob / squash / teleport drop)
   const PAD_SIDE = 3;
   const SPRITE_W = (8 + 2 * PAD_SIDE) * CELL;   // 56
-  const SPRITE_H = (PAD_TOP + 8) * CELL;        // 56, feet flush with the canvas bottom
+  const SPRITE_H = (PAD_TOP + 8) * CELL;        // 72, feet flush with the canvas bottom
   const BODY = 8 * CELL;                        // 32, the visible critter box
   const snapCell = (v) => Math.round(v / CELL) * CELL;  // quantise motion to whole critter-pixels
 
@@ -250,10 +250,10 @@
     const airDist = Math.abs(landX - launchX);
     // arc height grows with the leap distance AND how high the cursor is — but it always
     // lands back on the edge (a real parabola, never a vertical drop into a glass wall).
-    const peak = clamp(airDist * 0.4 + (heightAbove || 0) * 0.7 + 8, 10, 92);
-    const tumble = peak > 40;                                // high arc -> tumble; low -> skid
-    const runupDur = 200, airDur = clamp(airDist * 2.2 + peak * 2, 300, 900), landDur = tumble ? 560 : 420;
-    jump = { t0: t, startX, launchX, landX, dir, runupDur, airDur, peak, tumble, overshoot: tumble ? 26 : 0, landDur, landT: 0, landSpawned: false, dur: runupDur + airDur + landDur };
+    const peak = clamp(airDist * 0.3 + (heightAbove || 0) * 0.5 + 6, 8, 64);  // gentler, less exaggerated arc
+    const tumble = peak > 38;                                // high arc -> tumble; low -> skid
+    const runupDur = 240, airDur = clamp(airDist * 3 + peak * 2, 460, 1100), landDur = tumble ? 600 : 440;  // a touch slower
+    jump = { t0: t, startX, launchX, landX, dir, runupDur, airDur, peak, tumble, overshoot: tumble ? 22 : 0, landDur, landT: 0, landSpawned: false, dur: runupDur + airDur + landDur };
     facing = dir;
   }
 
@@ -282,10 +282,10 @@
   function startTeleport(t) {
     const b = bounds();
     const off = (Math.random() < 0.5 ? -1 : 1) * (44 + Math.random() * 40);
-    teleport = { t0: t, fromX: x, toX: clamp(x + off, b.min, b.max), sinkDur: 440, pauseDur: 240, dropDur: 300, dur: 980 };
+    teleport = { t0: t, fromX: x, toX: clamp(x + off, b.min, b.max), sinkDur: 420, pauseDur: 260, dropDur: 420, dur: 1100 };
   }
-  function drawRainbow(t) {
-    const yb = SPRITE_H - CELL, cols = 9, x0 = Math.round(SPRITE_W / 2 - cols * CELL / 2);
+  function drawRainbow(t, yb) {
+    const cols = 9, x0 = Math.round(SPRITE_W / 2 - cols * CELL / 2);
     for (let i = 0; i < cols; i++) {
       ctx.globalAlpha = 0.85;
       ctx.fillStyle = "hsl(" + ((i * 40 + t * 0.5) % 360) + ",95%,58%)";
@@ -337,7 +337,7 @@
       const e = t - teleport.t0;
       if (e < teleport.sinkDur) T.dy = (e / teleport.sinkDur) * 8;                  // sink line-by-line (clips at the ground)
       else if (e < teleport.sinkDur + teleport.pauseDur) T.dy = 9;                  // fully under
-      else { const k = clamp((e - teleport.sinkDur - teleport.pauseDur) / teleport.dropDur, 0, 1); T.dy = -(1 - k) * 5; if (k > 0.86) T.squashY = 0.85; }  // drop from a slight height onto the portal
+      else { const k = clamp((e - teleport.sinkDur - teleport.pauseDur) / teleport.dropDur, 0, 1); T.dy = -9 * (1 - k * k); if (k > 0.9) T.squashY = 0.8; }  // fall from a height onto the portal (accelerating)
     } else if (state === "react") {                         // a "caught you!" celebration
       const fr = Math.floor((t - react.t0) / (1000 / 12));
       if (react.kind === "excited") {
@@ -446,7 +446,11 @@
     if (ps.animated || hasDust || drawKey !== lastDrawKey) {     // repaint when the sprite/dust changes
       paint(grid, ps.p, ps.T, flip, ps.rot);
       if (hasDust) drawDust(t);
-      if (state === "teleport") drawRainbow(t);
+      if (state === "teleport") {
+        const te = t - teleport.t0;
+        // portal on the ground while sinking in; portal up top while dropping out
+        drawRainbow(t, te < teleport.sinkDur + teleport.pauseDur ? SPRITE_H - CELL : SPRITE_H - CELL - 9 * CELL);
+      }
       lastDrawKey = drawKey;
       perfSum += now() - a; perfN++;
     }
