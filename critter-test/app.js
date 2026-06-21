@@ -35,7 +35,7 @@
   const force2x2Eyes = (s) => ({
     ...s,
     waist: (s.waist === "bite-l" || s.waist === "bite-r") ? "straight" : s.waist,
-    eyes: { ...s.eyes, style: "normal", pupil: "dot" },  // dot pupils -> 2 black pixels that track 4 ways
+    eyes: { ...s.eyes, style: "normal" },  // pupils are re-stamped as 2px directional bars (see stampPupils)
   });
   const randSeed = () => Math.floor(Math.random() * 0x100000000).toString(36);
   function specFromURL() {
@@ -50,11 +50,56 @@
   // Rasterized grids are memoized by pose key — kills the per-frame rasterize
   // cost so a redraw is just the (<=64 cell) fill loop.
   let gridCache = new Map();
-  function gridFor(gaze, blink, legShift) {
-    const key = gaze.dx + "," + gaze.dy + "," + blink + "," + legShift;
+  function gridFor(dir, blink, legShift) {
+    const key = dir + "," + blink + "," + legShift;
     let g = gridCache.get(key);
-    if (!g) { g = rasterize(spec, { gaze, blink, legShift }); gridCache.set(key, g); }
+    if (!g) {
+      g = rasterize(spec, { gaze: { dx: 0, dy: 0 }, blink, legShift });
+      if (blink === 0) stampPupils(g, dir);   // override engine pupils with a 2px directional bar
+      gridCache.set(key, g);
+    }
     return g;
+  }
+  // Find each eye (a connected block of code 2/3) so we can place pupils ourselves.
+  function eyeBoxes(g) {
+    const seen = Array.from({ length: 8 }, () => new Array(8).fill(false));
+    const boxes = [];
+    for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
+      if (seen[y][x] || (g[y][x] !== 2 && g[y][x] !== 3)) continue;
+      const stack = [[x, y]], cells = []; let x0 = 8, x1 = -1, y0 = 8, y1 = -1;
+      seen[y][x] = true;
+      while (stack.length) {
+        const [cx, cy] = stack.pop(); cells.push([cx, cy]);
+        if (cx < x0) x0 = cx; if (cx > x1) x1 = cx; if (cy < y0) y0 = cy; if (cy > y1) y1 = cy;
+        for (const [ax, ay] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = cx + ax, ny = cy + ay;
+          if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8 && !seen[ny][nx] && (g[ny][nx] === 2 || g[ny][nx] === 3)) { seen[ny][nx] = true; stack.push([nx, ny]); }
+        }
+      }
+      boxes.push({ x0, x1, y0, y1, cells });
+    }
+    return boxes;
+  }
+  // Each pupil is ALWAYS a 2px bar at one edge of the eye: left / right / top / bottom.
+  function stampPupils(g, dir) {
+    for (const e of eyeBoxes(g)) {
+      for (const [cx, cy] of e.cells) g[cy][cx] = 2;          // reset eye to white
+      if (dir === "L") { g[e.y0][e.x0] = 3; g[e.y1][e.x0] = 3; }
+      else if (dir === "R") { g[e.y0][e.x1] = 3; g[e.y1][e.x1] = 3; }
+      else if (dir === "U") { g[e.y0][e.x0] = 3; g[e.y0][e.x1] = 3; }
+      else { g[e.y1][e.x0] = 3; g[e.y1][e.x1] = 3; }          // "D" (default)
+    }
+  }
+  // Which edge the pupils sit on, from the pointer direction (accounting for body flip).
+  function pupilDir(geo, flip) {
+    if (!mouseIn) return "D";
+    const mvx = mx - geo.cx, mvy = my - geo.cy;
+    if (Math.abs(mvx) >= Math.abs(mvy)) {
+      let left = mvx < 0;
+      if (flip) left = !left;     // the body mirror swaps left/right in canonical space
+      return left ? "L" : "R";
+    }
+    return mvy < 0 ? "U" : "D";
   }
   function applySpec(next) {
     spec = force2x2Eyes(next);
@@ -71,7 +116,7 @@
   function paint(grid, p, t, flip) {
     const dx = t.dx || 0, dy = t.dy || 0;
     const sq = t.squashY == null ? 1 : t.squashY;
-    const sqx = t.squashX == null ? 1 : t.squashX;   // horizontal squash (drives the spin)
+    const sqx = t.squashX == null ? 1 : t.squashX;   // horizontal squash (kept for general use)
     const w = Math.max(1, Math.ceil(CELL * sqx));
     ctx.clearRect(0, 0, SPRITE_W, SPRITE_H);
     for (let y = 0; y < 8; y++)
@@ -102,24 +147,28 @@
   let lastJumpEnd = -1e9;
   let react = null;              // { kind, t0, dur } — a "caught you!" celebration
   let lastReactEnd = -1e9;
+  let forced = null;             // { state, until } — a button-triggered demo animation
+  let demoTarget = null;         // when set, walk/jump move here instead of toward the mouse
+  let lastInteraction = now();   // last genuine user interaction (drives sleep)
   let lastT = now();
 
   // mouse (passive listener only stores coordinates; all math runs in the tick)
   let mx = -1e9, my = -1e9, mouseMoved = -1e9, mouseIn = false;
-  addEventListener("mousemove", (e) => { mx = e.clientX; my = e.clientY; mouseMoved = now(); mouseIn = true; wake(); }, { passive: true });
+  addEventListener("mousemove", (e) => { mx = e.clientX; my = e.clientY; mouseMoved = now(); mouseIn = true; lastInteraction = now(); wake(); }, { passive: true });
   addEventListener("mouseleave", () => { mouseIn = false; });
 
   // typing / submit
   const ta = document.getElementById("ta");
   let lastType = -1e9, thinkUntil = 0, celebrateUntil = 0;
-  ta.addEventListener("input", () => { lastType = now(); autosize(); wake(); });
-  ta.addEventListener("focus", wake);
+  ta.addEventListener("input", () => { lastType = now(); lastInteraction = now(); autosize(); wake(); });
+  ta.addEventListener("focus", () => { lastInteraction = now(); wake(); });
   function autosize() { ta.style.height = "auto"; ta.style.height = Math.min(160, ta.scrollHeight) + "px"; }
   function submit() {
     const v = ta.value.trim();
     if (!v) return;
     ta.value = ""; autosize();
     const t = now();
+    lastInteraction = t;
     celebrateUntil = t + 950;     // a little hop of triumph
     thinkUntil = t + 2400;        // then "thinking" about the answer
     wake();
@@ -139,12 +188,15 @@
   const JUMP_LO = 45, JUMP_HI = 80;  // from this mid-range it can leap toward the mouse
   const JUMP_COOLDOWN = 1100; // ms between leaps
   const REACT_COOLDOWN = 2000;// ms between celebrations while the cursor lingers
+  const REACT_DUR = { excited: 900, wiggle: 760, dance: 1000, nod: 720 };
   const MAX_WALK = 165;       // px/s — and it SPEEDS UP as it nears the mouse
   const RETURN_SPEED = 90;    // px/s strolling back home
-  const REST_ANIM_MS = 30000; // a small idle animation roughly every 30s
+  const REST_ANIM_MS = 10000; // a small idle animation roughly every 10s
+  const SLEEP_AFTER = 16000;  // no interaction for this long -> doze off
 
   /* ---- the motion state machine --------------------------------------- */
   function decide(t, geo) {
+    if (forced) { if (t < forced.until) return forced.state; forced = null; demoTarget = null; }
     if (t < celebrateUntil) return "celebrate";
     if (document.activeElement === ta && (t - lastType < 2500 || t < thinkUntil)) return "think";
     if (react) { if (t - react.t0 >= react.dur) { react = null; lastReactEnd = t; } else return "react"; }
@@ -163,14 +215,15 @@
     }
     if (moused && geo.d < ENGAGE_R) return "follow";        // mouse in the zone -> follow it
     if (Math.abs(x - homeX()) >= CELL) return "return";     // mouse gone -> head home
-    return "rest";                                          // home + dormant
+    if (t - lastInteraction > SLEEP_AFTER) return "sleep";  // left alone a while -> doze off
+    return "rest";                                          // home + idle
   }
 
   // pick a random "caught you!" celebration (jump is a separate traversal move)
   function startReact(t, geo) {
-    const kind = ["excited", "wiggle", "dance", "nod", "spin"][Math.floor(Math.random() * 5)];
+    const kind = ["excited", "wiggle", "dance", "nod"][Math.floor(Math.random() * 4)];
     const f = Math.sign(mx - geo.cx); if (f) facing = f;     // celebrate toward the cursor
-    const dur = { excited: 900, wiggle: 760, dance: 1000, nod: 720, spin: 720 }[kind];
+    const dur = REACT_DUR[kind];
     return { kind, t0: t, dur };
   }
 
@@ -196,8 +249,8 @@
       p = gradientPaint(hexes(), spec.gradientDir, "pulse", t / 12);
     } else if (state === "jump") {
       const ph = clamp((t - jump.t0) / jump.dur, 0, 1);
-      lift = -Math.sin(ph * Math.PI) * jump.reach;          // arc; horizontal travel handled in step()
-      T.squashY = ph < 0.12 ? 0.84 : ph > 0.9 ? 0.82 : 1;   // crouch + landing squash
+      lift = -jump.reach * 4 * ph * (1 - ph);               // ballistic parabola — constant gravity
+      T.squashY = ph < 0.14 ? 0.82 : ph > 0.9 ? 0.8 : 1;    // crouch to launch, squash on landing
     } else if (state === "react") {                         // a "caught you!" celebration
       const fr = Math.floor((t - react.t0) / (1000 / 12));
       if (react.kind === "excited") {
@@ -217,16 +270,13 @@
         legShift = [0, -1, -1, 0, 0, 1, 1, 0][k];
       } else if (react.kind === "nod") {
         T.dy = [0, 1, 1, 0, 0, 1, 1, 0][fr % 8];
-      } else if (react.kind === "spin") {
-        const ph = clamp((t - react.t0) / react.dur, 0, 1);
-        const ang = ph * Math.PI * 2;                        // one full turn
-        T.squashX = Math.abs(Math.cos(ang));                 // body narrows to a line, then widens...
-        flipOverride = Math.cos(ang) < 0;                    // ...flipping through the midpoint
-        T.dy = -Math.round(Math.sin(ph * Math.PI) * 2);      // a little hop through the spin
       }
-    } else if (state === "follow" || state === "return") {
+    } else if (state === "follow" || state === "return" || state === "demowalk") {
       legShift = [-1, 0, 1, 0][legPhase];                   // feet step; no vertical bob
-    } else { // rest: dormant at home, with an occasional breath
+    } else if (state === "sleep") {                         // asleep: slow breathing (eyes shut in render)
+      T.squashY = (t < restAnimUntil && restAnim === "breath")
+        ? 0.93 + 0.05 * Math.sin(Math.PI * (t - restAnimStart) / 1400) : 0.95;
+    } else { // rest: dormant at home, with an occasional glance/bob
       if (t < restAnimUntil && restAnim === "bob") T.dy = [0, -1, -1, 0][Math.floor((t - restAnimStart) / 90) % 4];
     }
     return { legShift, T, p, lift, flipOverride, animated: state === "think" || state === "celebrate" || state === "react" };
@@ -245,8 +295,9 @@
     const b = bounds();
 
     // target x
-    if (state === "follow" || state === "jump") targetX = clamp(mx - geo.r.left - SPRITE_W / 2, b.min, b.max);
+    if (state === "follow" || state === "jump") targetX = (demoTarget != null) ? demoTarget : clamp(mx - geo.r.left - SPRITE_W / 2, b.min, b.max);
     else if (state === "return") targetX = homeX();
+    else if (state === "demowalk") targetX = demoTarget;
     else targetX = x;
     if (popupOpen || chatOpen || toolsShown) targetX = x;   // hold still while interacting
 
@@ -256,6 +307,7 @@
     if (state === "follow") speed = clamp(1 - geo.d / ENGAGE_R, 0.35, 1) * MAX_WALK;
     else if (state === "jump") speed = 230;                  // leap toward the mouse
     else if (state === "return") speed = RETURN_SPEED;
+    else if (state === "demowalk") speed = 120;
     if (speed > 0 && Math.abs(targetX - x) >= CELL) {
       const interval = 1000 / (speed / CELL);    // ms per whole-pixel step
       stepAcc += dt * 1000;
@@ -278,19 +330,18 @@
     curLift = ps.lift;
     const flip = ps.flipOverride != null ? ps.flipOverride : (facing < 0);
 
-    // Eyes: the two dot pupils always look toward the pointer (compensated for the body
-    // flip); blink is layered on top on a global timer, wherever the eyes happen to be.
-    let lookDx = 0, lookDy = 0;
-    if (mouseIn) { lookDx = Math.sign(mx - geo.cx); lookDy = Math.sign(my - geo.cy); }
-    const gazeDx = flip ? -lookDx : lookDx;
-    if (state !== "rest" && t > nextBlink) { blinkStart = t; nextBlink = t + 3200 + Math.random() * 3200; }
+    // Eyes: two 2px pupils always point at the pointer (left/right/top/bottom);
+    // blink is layered on top on a global timer, wherever the eyes happen to be.
+    const dir = pupilDir(geo, flip);
+    if (state !== "rest" && state !== "sleep" && t > nextBlink) { blinkStart = t; nextBlink = t + 3200 + Math.random() * 3200; }
     const bp = t - blinkStart;
-    const blink = (bp >= 0 && bp < 300) ? (bp < 70 ? 1 : bp < 230 ? 2 : 1) : 0;
+    let blink = (bp >= 0 && bp < 300) ? (bp < 70 ? 1 : bp < 230 ? 2 : 1) : 0;
+    if (state === "sleep") blink = 2;                       // eyes shut while asleep
 
     const a = now();
-    const grid = gridFor({ dx: gazeDx, dy: lookDy }, blink, ps.legShift);
+    const grid = gridFor(dir, blink, ps.legShift);
     const drawKey = ps.animated ? "a" + Math.floor(t / (1000 / 12))
-      : [gazeDx, lookDy, blink, ps.legShift, Math.round(ps.T.dy), Math.round(ps.T.squashY * 100), Math.round(ps.T.squashX * 100), flip ? 1 : 0].join(",");
+      : [dir, blink, ps.legShift, Math.round(ps.T.dy), Math.round(ps.T.squashY * 100), Math.round(ps.T.squashX * 100), flip ? 1 : 0].join(",");
     if (ps.animated || drawKey !== lastDrawKey) {     // only repaint when the sprite actually changes
       paint(grid, ps.p, ps.T, flip);
       lastDrawKey = drawKey;
@@ -312,7 +363,7 @@
     // Park the loop once the critter is home and dormant; a timer wakes it for the
     // occasional rest animation, and any mouse move / focus wakes it instantly.
     const blinking = (t - blinkStart) < 300;
-    if (state === "rest" && t >= restAnimUntil && !blinking && !popupOpen) { active = false; scheduleRestAnim(); return; }
+    if ((state === "rest" || state === "sleep") && t >= restAnimUntil && !blinking && !popupOpen && !chatOpen && !toolsShown) { active = false; scheduleRestAnim(); return; }
     requestAnimationFrame(step);
   }
 
@@ -321,19 +372,23 @@
     if (!active) { active = true; lastT = now(); requestAnimationFrame(step); }
   }
 
-  // While dormant at home, fire a small animation about every REST_ANIM_MS.
+  // While dormant at home, wake briefly every ~10s for a blink/glance — or, once
+  // asleep, for a slow breath. Timed so it dozes off right at SLEEP_AFTER.
   function scheduleRestAnim() {
     if (restTimer || reduced.matches) return;
+    const since = now() - lastInteraction;
+    const delay = (since < SLEEP_AFTER && SLEEP_AFTER - since < REST_ANIM_MS) ? Math.max(200, SLEEP_AFTER - since) : REST_ANIM_MS;
     restTimer = setTimeout(() => {
       restTimer = null;
-      if (Math.random() < 0.6) { blinkStart = now(); nextBlink = now() + REST_ANIM_MS; } // a slow blink
-      else { restAnim = "bob"; restAnimStart = now(); restAnimUntil = now() + 700; }       // a breath
+      if (now() - lastInteraction >= SLEEP_AFTER) { restAnim = "breath"; restAnimStart = now(); restAnimUntil = now() + 1400; } // a sleeping breath
+      else if (Math.random() < 0.6) { blinkStart = now(); nextBlink = now() + REST_ANIM_MS; }                                   // a blink
+      else { restAnim = "bob"; restAnimStart = now(); restAnimUntil = now() + 700; }                                            // a glance
       wake();
-    }, REST_ANIM_MS);
+    }, delay);
   }
 
   function drawStatic() {  // reduced-motion: one resting frame, no loop
-    const grid = gridFor({ dx: 0, dy: 0 }, 0, 0);
+    const grid = gridFor("D", 0, 0);
     paint(grid, staticPaint, { dy: 0, squashY: 1 }, facing < 0);
     const b = bounds();
     x = clamp(x, b.min, b.max);
@@ -380,12 +435,14 @@
   document.getElementById("toolSettings").addEventListener("click", (e) => { e.stopPropagation(); openPopup(); });
   // a click outside an open panel closes it
   addEventListener("click", (e) => {
+    lastInteraction = now();
     if (popupOpen && !pop.contains(e.target)) closePopup();
     if (chatOpen && !chatpop.contains(e.target) && !critTools.contains(e.target)) closeChat();
   });
 
   function openPopup() {
     popupOpen = true;
+    lastInteraction = now();
     toolsShown = false; critTools.classList.remove("show");
     dismissHint();
     syncPopup();
@@ -406,9 +463,9 @@
 
   /* ---- Forge help chat ------------------------------------------------- */
   const FAQ = [
-    ["What is Forge?", "Forge by Sycamore turns a conversation into a live, interactive page. Describe what you want — like the prospect map above — and Forge builds it, ready to edit and share."],
-    ["How do I share a page?", "Use the share button at the top-right. Anyone with the link sees the live page, and the URL captures its exact state."],
-    ["Who is the critter?", "That is your Sycritter! It lives on the composer, watches your cursor, and reacts when you reach it. Open the gear in its menu to restyle it."],
+    ["What is Sycamore?", "Sycamore helps you build enterprise-grade apps and agents from a conversation. Describe what you need — like the prospect map above — and it assembles a live, editable, shareable app."],
+    ["How do I build an agent?", "Describe the agent's job and the tools it should use, and Sycamore wires it up. Refine it in plain language, then ship when it's ready."],
+    ["Who is the critter?", "That is your companion! It lives on the composer, watches your cursor, and reacts when you reach it. Open the gear in its menu to restyle it."],
   ];
   const chatLog = document.getElementById("chatLog");
   const chatInput = document.getElementById("chatInput");
@@ -423,10 +480,10 @@
   function answer(q) {
     addMsg("me", q);
     const hit = FAQ.find(([question]) => question.toLowerCase() === q.toLowerCase());
-    setTimeout(() => addMsg("bot", hit ? hit[1] : "Good question! Open the Forge docs from the top-right menu, or a teammate can jump into the shared session to help."), 260);
+    setTimeout(() => addMsg("bot", hit ? hit[1] : "Good question! Open the Sycamore docs from the top-right menu, or a teammate can jump into the shared session to help."), 260);
   }
   function seedChat() {
-    addMsg("bot", "Hi! I'm the Forge helper. Ask me anything about building and sharing interactive pages with Forge by Sycamore.");
+    addMsg("bot", "Hello! I am your personal help agent. Ask me anything about building enterprise grade apps and agents with Sycamore.");
     const chips = document.getElementById("chatChips");
     for (const [q] of FAQ) {
       const c = document.createElement("button");
@@ -436,7 +493,7 @@
     }
   }
   function openChat() {
-    chatOpen = true; toolsShown = false; critTools.classList.remove("show");
+    chatOpen = true; lastInteraction = now(); toolsShown = false; critTools.classList.remove("show");
     if (!chatSeeded) { seedChat(); chatSeeded = true; }
     chatpop.classList.add("open"); dismissHint(); wake();
   }
@@ -480,6 +537,24 @@
   }
 
   function dismissHint() { hintShown = true; hint.classList.remove("show"); }
+
+  /* ---- demo triggers (the buttons in the conversation) ----------------- */
+  function forceAnim(kind) {
+    const t = now();
+    lastInteraction = t;
+    forced = null; demoTarget = null; jump = null; react = null;
+    const b = bounds();
+    if (kind === "walk") { demoTarget = (x > (b.min + b.max) / 2) ? b.min : b.max; forced = { state: "demowalk", until: t + 2600 }; }
+    else if (kind === "jump") { demoTarget = clamp(x + (x > (b.min + b.max) / 2 ? -60 : 60), b.min, b.max); jump = { t0: t, dur: 640, reach: 48 }; forced = { state: "jump", until: t + 640 }; }
+    else if (REACT_DUR[kind]) { react = { kind, t0: t, dur: REACT_DUR[kind] }; }
+    else if (kind === "think") { forced = { state: "think", until: t + 1900 }; }
+    else if (kind === "celebrate") { celebrateUntil = t + 1300; }
+    else if (kind === "sleep") { lastInteraction = t - SLEEP_AFTER - 4000; forced = { state: "sleep", until: t + 4000 }; restAnim = "breath"; restAnimStart = t; restAnimUntil = t + 4000; }
+    else if (kind === "blink") { blinkStart = t; }
+    wake();
+  }
+  document.querySelectorAll("[data-anim]").forEach((btn) =>
+    btn.addEventListener("click", () => forceAnim(btn.dataset.anim)));
 
   /* ---- boot ------------------------------------------------------------ */
   const perf = document.getElementById("perf");

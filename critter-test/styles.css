@@ -7,7 +7,7 @@
     --composer-bg: #ffffff;
     --send: #6f7d2f;        /* olive send/stop, matched to the product shot */
     --send-ink: #f3f4ea;
-    --font: "Afacad Flux", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   }
   * { box-sizing: border-box; }
   *, *::before, *::after { border-radius: 0 !important; }   /* flat: no rounded corners anywhere */
@@ -67,13 +67,15 @@
   .thinking .bars { display: inline-flex; gap: 2px; }
   .thinking .bars i { width: 4px; height: 16px; display: block; }
   .thinking .bars i:nth-child(1){ background:#9fb3e6; } .thinking .bars i:nth-child(2){ background:#e08a55; } .thinking .bars i:nth-child(3){ background:#7f97d8; }
-  .row-left { display: flex; justify-content: flex-start; margin-top: 26px; }
+  .row-left { display: flex; justify-content: flex-start; margin-top: 10px; }
   .bubble--bot { background: #fff; border: 1px solid var(--line); max-width: 78%; font-size: 18px; line-height: 1.5; }
-  .bubble--bot .lead { display: block; margin-bottom: 12px; }
-  .anims { margin: 0; padding-left: 18px; list-style: none; }
-  .anims li { margin: 7px 0; padding-left: 4px; }
-  .anims b { font-weight: 600; }
-  .anims .k { display: inline-block; min-width: 78px; color: var(--send); font-weight: 700; }
+  .bubble--bot b { font-weight: 600; color: var(--send); }
+  /* trigger buttons — force any animation on demand */
+  .triggers { background: #fff; border: 1px solid var(--line); padding: 14px 16px; max-width: 80%; }
+  .triggers__label { display: block; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 10px; }
+  .triggers__row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .triggers__row button { border: 1px solid #e2e2e2; background: #fafafa; color: #333; font-family: var(--font); font-size: 14px; font-weight: 500; padding: 7px 13px; cursor: pointer; }
+  .triggers__row button:hover { background: var(--send); color: #fff; border-color: var(--send); }
 
   /* ---- composer (the textbox the critter lives on) --------------------- */
   .dock { flex: 0 0 auto; display: flex; justify-content: center; padding: 12px 26px 14px; }
