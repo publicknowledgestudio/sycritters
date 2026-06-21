@@ -183,8 +183,8 @@
     ta.value = ""; autosize();
     const t = now();
     lastInteraction = t;
-    celebrateUntil = t + 950;     // a little hop of triumph
-    thinkUntil = t + 2400;        // then "thinking" about the answer
+    react = { kind: "pulse", t0: t, dur: REACT_DUR.pulse };  // pulse 4x on send
+    thinkUntil = t + REACT_DUR.pulse + 1600;                 // then shimmer ("thinking")
     wake();
   }
   ta.addEventListener("keydown", (e) => {
@@ -207,7 +207,7 @@
   const JUMP_LO = 45, JUMP_HI = 80;  // from this mid-range it can leap toward the mouse
   const JUMP_COOLDOWN = 1100; // ms between leaps
   const REACT_COOLDOWN = 2000;// ms between celebrations while the cursor lingers
-  const REACT_DUR = { excited: 900, wiggle: 760, dance: 1000, nod: 720, keystroke: 360 };
+  const REACT_DUR = { excited: 900, wiggle: 760, dance: 1000, nod: 720, keystroke: 360, pulse: 900 };
   const MAX_WALK = 165;       // px/s — and it SPEEDS UP as it nears the mouse
   const RETURN_SPEED = 90;    // px/s strolling back home
   const REST_ANIM_MS = 10000; // a small idle animation roughly every 10s
@@ -365,6 +365,11 @@
         T.dy = [0, 1, 1, 0, 0, 1, 1, 0][fr % 8];
       } else if (react.kind === "keystroke") {
         T.dy = [0, 1, 1, 0][Math.min(fr, 3)];   // a single nod
+      } else if (react.kind === "pulse") {
+        const k = clamp((t - react.t0) / react.dur, 0, 1);
+        const s = 1 + 0.2 * Math.sin((k * 4 % 1) * Math.PI);   // 4 grow-shrink pulses
+        T.squashX = s; T.squashY = s;
+        p = gradientPaint(hexes(), spec.gradientDir, "pulse", t / 16);
       }
     } else if (state === "follow" || state === "return" || state === "demowalk") {
       legShift = [-1, 0, 1, 0][legPhase];                   // feet step; no vertical bob
