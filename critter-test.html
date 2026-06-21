@@ -1,0 +1,1323 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Critter Test — a critter that lives on your composer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Afacad+Flux:wght@100..1000&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css" />
+<style>
+  :root {
+    --bg: #ffffff;
+    --ink: #1d1d1f;
+    --muted: #8a8a8e;
+    --line: #ececec;
+    --bubble: #f4f3f0;
+    --composer-bg: #ffffff;
+    --send: #6f7d2f;        /* olive send/stop, matched to the product shot */
+    --send-ink: #f3f4ea;
+    --font: "Afacad Flux", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  *, *::before, *::after { border-radius: 0 !important; }   /* flat: no rounded corners anywhere */
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font-family: var(--font);
+    color: var(--ink);
+    background: radial-gradient(130% 90% at 50% 0%, #ffffff 58%, #fbf6f0 100%);
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ---- product chrome (decorative context for the composer) ------------ */
+  .topbar {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 26px;
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar__title { display: flex; align-items: center; gap: 12px; font-size: 19px; font-weight: 600; }
+  .topbar__title svg { display: block; color: #3a3a3c; }
+  .topbar__right { display: flex; align-items: center; gap: 12px; }
+  .avatars { display: flex; }
+  .avatars .av {
+    width: 30px; height: 30px; border-radius: 50%; margin-left: -8px;
+    border: 2px solid #fff; background: #ccc; background-size: cover;
+  }
+  .avatars .av:first-child { margin-left: 0; }
+  .plus5 { color: var(--muted); font-size: 15px; font-weight: 600; }
+  .sharebtn {
+    width: 44px; height: 44px; border: 1px solid var(--line); border-radius: 12px;
+    display: grid; place-items: center; color: #3a3a3c; background: #fff; cursor: pointer;
+  }
+
+  .convo {
+    flex: 1 1 auto;
+    overflow: auto;
+    padding: 26px 26px 8px;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  .convo__inner { width: 100%; max-width: 1180px; }
+  .day { text-align: center; color: var(--muted); font-size: 13px; letter-spacing: .12em; font-weight: 700; margin: 8px 0 26px; }
+  .row-right { display: flex; justify-content: flex-end; }
+  .bubble {
+    background: var(--bubble); border-radius: 14px; padding: 22px 26px;
+    font-size: 21px; line-height: 1.45; max-width: 70%;
+  }
+  .stamp { display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-top: 10px; }
+  .stamp .av { width: 34px; height: 34px; border-radius: 50%; background: #b9c08f; }
+  .stamp .time { color: var(--muted); font-size: 16px; }
+  .thinking { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 19px; margin-top: 26px; }
+  .thinking .bars { display: inline-flex; gap: 2px; }
+  .thinking .bars i { width: 4px; height: 16px; display: block; }
+  .thinking .bars i:nth-child(1){ background:#9fb3e6; } .thinking .bars i:nth-child(2){ background:#e08a55; } .thinking .bars i:nth-child(3){ background:#7f97d8; }
+  .row-left { display: flex; justify-content: flex-start; margin-top: 26px; }
+  .bubble--bot { background: #fff; border: 1px solid var(--line); max-width: 78%; font-size: 18px; line-height: 1.5; }
+  .bubble--bot .lead { display: block; margin-bottom: 12px; }
+  .anims { margin: 0; padding-left: 18px; list-style: none; }
+  .anims li { margin: 7px 0; padding-left: 4px; }
+  .anims b { font-weight: 600; }
+  .anims .k { display: inline-block; min-width: 78px; color: var(--send); font-weight: 700; }
+
+  /* ---- composer (the textbox the critter lives on) --------------------- */
+  .dock { flex: 0 0 auto; display: flex; justify-content: center; padding: 12px 26px 14px; }
+  .composer {
+    position: relative;            /* anchor for the critter */
+    width: min(1180px, 94vw);
+    background: var(--composer-bg);
+    border: 1px solid #e7e7e7;
+    border-radius: 6px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.06);
+    padding: 20px 22px 16px;
+    overflow: visible;             /* let the critter perch above the top edge */
+  }
+  .composer textarea {
+    width: 100%; border: 0; outline: 0; resize: none; background: transparent;
+    font-family: var(--font); font-size: 20px; line-height: 1.4; color: var(--ink);
+    min-height: 30px; max-height: 160px; padding: 0; margin: 0;
+  }
+  .composer textarea::placeholder { color: #b7b7bb; }
+  .composer__row { display: flex; align-items: center; justify-content: space-between; margin-top: 18px; }
+  .composer__left, .composer__right { display: flex; align-items: center; gap: 16px; }
+  .iconbtn { border: 0; background: transparent; color: #6a6a6e; cursor: pointer; display: grid; place-items: center; padding: 4px; }
+  .iconbtn svg { display: block; }
+  .send {
+    width: 40px; height: 40px; border: 0; border-radius: 8px; background: var(--send);
+    color: var(--send-ink); cursor: pointer; display: grid; place-items: center;
+  }
+  .send .sq { width: 14px; height: 14px; background: currentColor; border-radius: 2px; }
+  .disclaimer { text-align: center; color: #b1b1b5; font-size: 14px; padding: 2px 0 8px; }
+
+  /* ---- the critter ----------------------------------------------------- */
+  #critter {
+    position: absolute; left: 0; top: 0;
+    image-rendering: pixelated; image-rendering: crisp-edges;
+    pointer-events: none;          /* never swallow composer clicks; we hit-test manually */
+    will-change: transform;
+    z-index: 5;
+  }
+  .hint {
+    position: fixed; z-index: 6; transform: translate(-50%, -100%);
+    background: #2b2b2e; color: #fff; font-size: 12px; padding: 5px 9px; border-radius: 8px;
+    white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity .35s ease;
+  }
+  .hint::after { content: ""; position: absolute; left: 50%; top: 100%; transform: translateX(-50%);
+    border: 5px solid transparent; border-top-color: #2b2b2e; }
+  .hint.show { opacity: .92; }
+
+  /* ---- proximity toolbar (chat + settings, floats above the critter) --- */
+  .crit-tools {
+    position: fixed; z-index: 12; transform: translate(-50%, -100%);
+    display: none; gap: 4px; padding: 4px; background: #2b2b2e;
+    box-shadow: 0 8px 20px rgba(0,0,0,.24);
+  }
+  .crit-tools.show { display: flex; }
+  .crit-tools::after { content: ""; position: absolute; left: 50%; top: 100%; transform: translateX(-50%);
+    border: 5px solid transparent; border-top-color: #2b2b2e; }
+  .crit-tools__btn { width: 30px; height: 30px; border: 0; background: transparent; color: #fff;
+    cursor: pointer; display: grid; place-items: center; font-size: 18px; line-height: 1; }
+  .crit-tools__btn:hover { background: rgba(255,255,255,.16); }
+
+  /* ---- Forge help chat ------------------------------------------------- */
+  .chatpop {
+    position: fixed; z-index: 22; right: 26px; bottom: 96px; width: 320px; max-height: 62vh;
+    display: none; flex-direction: column; background: #fff; border: 1px solid #e6e6e6;
+    box-shadow: 0 18px 50px rgba(0,0,0,.2); overflow: hidden;
+  }
+  .chatpop.open { display: flex; }
+  .chatpop__head { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  .chatpop__title { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; }
+  .chatpop__title .ph { color: var(--send); font-size: 18px; }
+  .chatpop__x { border: 0; background: transparent; font-size: 20px; line-height: 1; color: #9a9a9e; cursor: pointer; }
+  .chatpop__log { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .chatpop__msg { font-size: 14px; line-height: 1.5; padding: 9px 12px; max-width: 86%; }
+  .chatpop__msg--bot { background: #f4f3f0; align-self: flex-start; }
+  .chatpop__msg--me { background: var(--send); color: #fff; align-self: flex-end; }
+  .chatpop__chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 14px 10px; }
+  .chatpop__chip { border: 1px solid #e2e2e2; background: #fafafa; font-size: 12px; padding: 6px 10px; cursor: pointer; color: #444; font-family: var(--font); }
+  .chatpop__chip:hover { background: #f0f0f0; }
+  .chatpop__input { display: flex; gap: 6px; padding: 10px 12px; border-top: 1px solid var(--line); }
+  .chatpop__input input { flex: 1; min-width: 0; border: 1px solid #e2e2e2; padding: 8px 10px; font-family: var(--font); font-size: 14px; outline: 0; }
+  .chatpop__input input:focus { border-color: var(--send); }
+  .chatpop__input button { border: 0; background: var(--send); color: #fff; width: 38px; cursor: pointer; display: grid; place-items: center; font-size: 16px; }
+
+  /* ---- customise popup ------------------------------------------------- */
+  .pop {
+    position: fixed; z-index: 20; width: 232px;
+    background: #fff; border: 1px solid #e6e6e6; border-radius: 14px;
+    box-shadow: 0 16px 44px rgba(0,0,0,.18); padding: 14px; display: none;
+    font-size: 13px;
+  }
+  .pop.open { display: block; }
+  .pop__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .pop__title { font-weight: 700; font-size: 13px; letter-spacing: .02em; }
+  .pop__x { border: 0; background: transparent; font-size: 18px; line-height: 1; color: #9a9a9e; cursor: pointer; padding: 0 2px; }
+  .pop__seed { display: flex; gap: 6px; margin-bottom: 12px; }
+  .pop__seed input {
+    flex: 1; min-width: 0; border: 1px solid #e2e2e2; border-radius: 8px; padding: 7px 9px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: #333; outline: 0;
+  }
+  .pop__seed input:focus { border-color: var(--send); }
+  .dice { border: 1px solid #e2e2e2; background: #fafafa; border-radius: 8px; padding: 0 10px; cursor: pointer; font-size: 15px; }
+  .pop__row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 0; }
+  .pop__row + .pop__row { border-top: 1px solid #f1f1f1; }
+  .pop__label { color: #8a8a8e; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; font-size: 11px; }
+  .stepper { display: flex; align-items: center; gap: 6px; }
+  .stepper button {
+    width: 24px; height: 24px; border: 1px solid #e2e2e2; background: #fff; border-radius: 7px;
+    cursor: pointer; color: #444; display: grid; place-items: center; font-size: 14px; line-height: 1;
+  }
+  .stepper button:hover { background: #f6f6f6; }
+  .stepper .val { min-width: 64px; text-align: center; font-weight: 600; color: #333; font-variant: tabular-nums; }
+  .swatches { display: flex; gap: 3px; }
+  .swatches i { width: 13px; height: 13px; border-radius: 3px; display: block; box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
+
+  /* ---- tiny live cost readout (answers "is this efficient?") ----------- */
+  .perf {
+    position: fixed; left: 12px; bottom: 10px; z-index: 30;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: #a8a8ad;
+    background: rgba(255,255,255,.7); border: 1px solid #eee; border-radius: 7px; padding: 4px 8px;
+    pointer-events: none; backdrop-filter: blur(4px);
+  }
+  @media (prefers-reduced-motion: reduce) { .hint { display: none; } }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar__title">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="7" height="16" rx="1.5"/><rect x="14" y="4" width="7" height="16" rx="1.5"/></svg>
+      Interactive Prospect Map
+    </div>
+    <div class="topbar__right">
+      <div class="avatars">
+        <span class="av" style="background:linear-gradient(135deg,#c94f3d,#e7a07a)"></span>
+        <span class="av" style="background:linear-gradient(135deg,#8a8f98,#cfd3da)"></span>
+        <span class="av" style="background:linear-gradient(135deg,#2c2c2e,#6b6b70)"></span>
+      </div>
+      <span class="plus5">+5</span>
+      <button class="sharebtn" title="Share">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.2 10.8 15.8 7.2M8.2 13.2l7.6 3.6"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="convo">
+    <div class="convo__inner">
+      <div class="day">TODAY</div>
+      <div class="row-right">
+        <div class="bubble">Build the interactive prospect map with the companies we have now, color-coded by stage, and make it clickable to see deal size and next steps. That sounds awesome.</div>
+      </div>
+      <div class="stamp"><span class="av"></span></div>
+      <div class="stamp"><span class="time">13:31</span></div>
+      <div class="row-left">
+        <div class="bubble bubble--bot">
+          <span class="lead">A little critter lives on the top edge of this box. Here's its repertoire:</span>
+          <ul class="anims">
+            <li><span class="k">Rests</span> sits at home (top-right) and <b>blinks / glances</b> every ~30s while you're away.</li>
+            <li><span class="k">Follows</span> when your cursor comes within ~100px it walks over, <b>speeding up as it gets closer</b>.</li>
+            <li><span class="k">Leaps</span> from a short distance it <b>jumps toward your cursor</b> to close the gap.</li>
+            <li><span class="k">Catches you</span> when it reaches your cursor it does a <b>random celebration</b> — hop, wiggle, dance, nod or spin.</li>
+            <li><span class="k">Thinks</span> peers down and <b>colour-pulses</b> while you type in the composer.</li>
+            <li><span class="k">Celebrates</span> a happy <b>hop</b> when you press Enter.</li>
+            <li><span class="k">Returns</span> strolls back home when your cursor leaves, then goes dormant.</li>
+            <li><span class="k">Customise</span> <b>click the critter</b> for a small popup (seed, top, bottom, colour).</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div class="dock">
+    <div class="composer" id="composer">
+      <canvas id="critter" aria-hidden="true"></canvas>
+      <textarea id="ta" rows="1" placeholder="Ask for changes or discuss a new idea entirely&hellip;"></textarea>
+      <div class="composer__row">
+        <div class="composer__left">
+          <button class="iconbtn" title="Add">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+        </div>
+        <div class="composer__right">
+          <button class="iconbtn" title="Dictate">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6 11a6 6 0 0 0 12 0M12 17v3"/></svg>
+          </button>
+          <button class="send" id="send" title="Send"><span class="sq"></span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="disclaimer">Forge can make mistakes. Verify important outputs.</div>
+
+  <div class="crit-tools" id="critTools">
+    <button class="crit-tools__btn" id="toolChat" title="Forge help"><i class="ph ph-chat-circle"></i></button>
+    <button class="crit-tools__btn" id="toolSettings" title="Critter settings"><i class="ph ph-gear-six"></i></button>
+  </div>
+  <div class="hint" id="hint">hover me</div>
+
+  <div class="pop" id="pop">
+    <div class="pop__head"><span class="pop__title">Customise critter</span><button class="pop__x" id="popX" title="Close">&times;</button></div>
+    <div class="pop__seed"><input id="seedInput" spellcheck="false" /><button class="dice" id="dice" title="Random critter">&#127922;</button></div>
+    <div class="pop__row"><span class="pop__label">Top</span><span class="stepper"><button data-step="top" data-dir="-1">&lsaquo;</button><span class="val" id="valTop">dome</span><button data-step="top" data-dir="1">&rsaquo;</button></span></div>
+    <div class="pop__row"><span class="pop__label">Bottom</span><span class="stepper"><button data-step="bottom" data-dir="-1">&lsaquo;</button><span class="val" id="valBottom">flat</span><button data-step="bottom" data-dir="1">&rsaquo;</button></span></div>
+    <div class="pop__row"><span class="pop__label">Colour</span><span class="stepper"><button data-step="color" data-dir="-1">&lsaquo;</button><span class="val swatches" id="valColor"></span><button data-step="color" data-dir="1">&rsaquo;</button></span></div>
+  </div>
+
+  <div class="chatpop" id="chatpop">
+    <div class="chatpop__head">
+      <span class="chatpop__title"><i class="ph ph-sparkle"></i> Forge by Sycamore</span>
+      <button class="chatpop__x" id="chatX" title="Close">&times;</button>
+    </div>
+    <div class="chatpop__log" id="chatLog"></div>
+    <div class="chatpop__chips" id="chatChips"></div>
+    <div class="chatpop__input">
+      <input id="chatInput" placeholder="Ask about Forge&hellip;" spellcheck="false" />
+      <button id="chatSend" title="Send"><i class="ph ph-paper-plane-right"></i></button>
+    </div>
+  </div>
+
+  <div class="perf" id="perf">measuring critter cost&hellip;</div>
+
+<!-- SYCRITTERS-ENGINE:START -->
+<script>
+globalThis.Sycritters = (function () {
+  "use strict";
+  const VERSION = "0.0.1";
+
+  // --- Seeded RNG ---------------------------------------------------------
+  function xmur3(str) {
+    let h = 1779033703 ^ str.length;
+    for (let i = 0; i < str.length; i++) {
+      h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
+      h = (h << 13) | (h >>> 19);
+    }
+    return function () {
+      h = Math.imul(h ^ (h >>> 16), 2246822507);
+      h = Math.imul(h ^ (h >>> 13), 3266489909);
+      return (h ^= h >>> 16) >>> 0;
+    };
+  }
+
+  function mulberry32(a) {
+    return function () {
+      a |= 0;
+      a = (a + 0x6d2b79f5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  // Returns a PRNG function seeded by an arbitrary string.
+  function rng(seed) {
+    return mulberry32(xmur3(String(seed))());
+  }
+
+  // --- Curated palette ----------------------------------------------------
+  // Ordered around the hue wheel so consecutive entries are analogous
+  // (gradients are built from consecutive runs -> always harmonious).
+  const PALETTE = [
+    { name: "amber",      hex: "#ffb000" },
+    { name: "chartreuse", hex: "#b8d94a" },
+    { name: "mint",       hex: "#5ee0a0" },
+    { name: "teal",       hex: "#28c7c7" },
+    { name: "azure",      hex: "#3b82f6" },
+    { name: "violet",     hex: "#6d5dfc" },
+    { name: "orchid",     hex: "#c056d9" },
+    { name: "coral",      hex: "#ff6b5a" },
+  ];
+
+  // --- Shared option lists (used by generate + the spec codec) -------------
+  const DIRS = ["none", "diagonal-left", "diagonal-right", "radial"];
+  // Legacy paint-motion codec axis. The UI now exposes agent states instead.
+  const MOTIONS = ["static", "drift", "pulse", "sheen"];
+  const WAISTS = ["straight", "pinch", "narrow", "bite-l", "bite-r"];
+  const EYE_STYLES = ["normal", "tall", "visor", "visor2", "short"]; // appended: codec indices stay stable
+  const ALIGNS = ["left", "center", "right"];
+  const PUPILS = ["dot", "bar"];
+
+  // --- Module vocabulary --------------------------------------------------
+  // Each module is a 4x4 left-half block. Columns are left->center
+  // [x0,x1,x2,x3]; x3 abuts the mirror line. Tops fill rows 0-3, bottoms 4-7.
+  const TOPS = [
+    { name: "dome",     rows: [[0,0,1,1],[0,1,1,1],[1,1,1,1],[1,1,1,1]] },
+    { name: "flat",     rows: [[1,1,1,1],[1,1,1,1],[1,1,1,1],[1,1,1,1]] },
+    { name: "notch",    rows: [[0,0,1,0],[0,1,1,1],[1,1,1,1],[1,1,1,1]] },
+    { name: "ears",     rows: [[0,1,1,0],[0,1,1,0],[1,1,1,1],[1,1,1,1]] },
+    { name: "antennae", rows: [[0,1,0,0],[0,1,1,1],[1,1,1,1],[1,1,1,1]] },
+    { name: "loaf",     rows: [[0,1,1,1],[1,1,1,1],[1,1,1,1],[1,1,1,1]] }, // corners-cut flat
+    { name: "crown",    rows: [[1,0,1,1],[1,1,1,1],[1,1,1,1],[1,1,1,1]] }, // flat with 1px slits
+    { name: "w",        rows: [[0,1,1,0],[0,1,1,1],[1,1,1,1],[1,1,1,1]] }, // horns, center fills a row lower
+    { name: "trident",  rows: [[0,1,0,1],[1,1,1,1],[1,1,1,1],[1,1,1,1]] }, // three nubs
+    { name: "dots",     rows: [[1,0,1,1],[0,1,1,1],[1,1,1,1],[1,1,1,1]] }, // detached corner pixels
+    { name: "handle",   rows: [[1,1,1,1],[0,1,1,1],[1,1,1,1],[1,1,1,1]] }, // full cap, open side pixels
+    { name: "lego",     rows: [[0,0,1,1],[1,1,1,1],[1,1,1,1],[1,1,1,1]] }, // centered 4-wide nub
+    { name: "tail-l", full: true, rows: [[1,0,0,1,1,1,1,1],[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1]] },
+    { name: "tail-r", full: true, rows: [[1,1,1,1,1,0,0,1],[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1]] },
+    // asymmetric diagonal slants (full 8-wide, not mirrored); 2 = shallow, 3 = deep:
+    { name: "2tl", full: true, rows: [[0,0,1,1,1,1,1,1],[0,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1]] },
+    { name: "2tr", full: true, rows: [[1,1,1,1,1,1,0,0],[1,1,1,1,1,1,1,0],[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1]] },
+    { name: "3tl", full: true, rows: [[0,0,0,1,1,1,1,1],[0,0,1,1,1,1,1,1],[0,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1]] },
+    { name: "3tr", full: true, rows: [[1,1,1,1,1,0,0,0],[1,1,1,1,1,1,0,0],[1,1,1,1,1,1,1,0],[1,1,1,1,1,1,1,1]] },
+  ];
+  const BOTTOMS = [
+    { name: "flat",    rows: [[1,1,1,1],[1,1,1,1],[1,1,1,1],[1,1,1,1]] },
+    { name: "round",   rows: [[1,1,1,1],[1,1,1,1],[0,1,1,1],[0,0,1,1]] },
+    { name: "legs",    rows: [[1,1,1,1],[1,1,1,1],[1,1,1,1],[0,1,1,0]] },
+    { name: "splayed", rows: [[1,1,1,1],[1,1,1,1],[1,1,1,1],[1,1,0,0]] },
+    { name: "tripod",  rows: [[1,1,1,1],[1,1,1,1],[1,1,1,1],[1,1,0,1]] }, // 2-1-2-1-2 legs
+    { name: "tripod2", rows: [[1,1,1,1],[1,1,1,1],[1,1,0,1],[1,1,0,1]] }, // tripod on 2-row stilts
+    { name: "toes",    rows: [[1,1,1,1],[1,1,1,1],[1,1,1,1],[0,1,0,1]] }, // three inset feet (1-2-1)
+    { name: "toes-a",  full: true, rows: [[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[1,0,1,0,1,0,1,0]] },
+    { name: "toes-b",  full: true, rows: [[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[0,1,0,1,0,1,0,1]] },
+    { name: "dots",    rows: [[1,1,1,1],[1,1,1,1],[0,1,1,1],[1,0,1,1]] }, // detached corner pixels
+    // asymmetric diagonal slants (full 8-wide, not mirrored); 2 = shallow, 3 = deep:
+    { name: "2bl", full: true, rows: [[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[0,1,1,1,1,1,1,1],[0,0,1,1,1,1,1,1]] },
+    { name: "2br", full: true, rows: [[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,0],[1,1,1,1,1,1,0,0]] },
+    { name: "3bl", full: true, rows: [[1,1,1,1,1,1,1,1],[0,1,1,1,1,1,1,1],[0,0,1,1,1,1,1,1],[0,0,0,1,1,1,1,1]] },
+    { name: "3br", full: true, rows: [[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,0],[1,1,1,1,1,1,0,0],[1,1,1,1,1,0,0,0]] },
+  ];
+
+  // --- Generation: seed -> spec ------------------------------------------
+  function pick(r, arr) {
+    return arr[Math.floor(r() * arr.length)];
+  }
+
+  // A short seed string derived from a rng (used by the 🎲 button).
+  function randomSeed(r) {
+    return Math.floor(r() * 0xffffffff).toString(36);
+  }
+
+  function generate(seed) {
+    const r = rng(seed);
+    const n = r() < 0.85 ? 2 : 3;                       // mostly 2 colors (subtle)
+    const start = Math.floor(r() * PALETTE.length);
+    const colors = [];                                  // analogous run -> harmonious
+    for (let j = 0; j < n; j++) colors.push(PALETTE[(start + j) % PALETTE.length]);
+    const gradientDir = DIRS[Math.floor(r() * DIRS.length)];
+    const gradientMotion = "static";
+    const slant = (nm) => /^[23][tb][lr]$/.test(nm);
+    const deep = (nm) => /^3[tb][lr]$/.test(nm);          // deep slants read lopsided -> manual-only
+    const top = pick(r, TOPS.filter((m) => !deep(m.name))).name;
+    let bpool = BOTTOMS.filter((m) => !deep(m.name));
+    if (slant(top)) bpool = bpool.filter((m) => !slant(m.name)); // at most one slant
+    const bottom = pick(r, bpool).name;
+    let waist = ["straight", "straight", "straight", "pinch", "pinch", "narrow"][Math.floor(r() * 6)];
+    if ((slant(top) || slant(bottom)) && waist === "narrow") waist = "straight"; // slant already trims
+    // mild one-sided bite, decided after the eye gap below so spec and render
+    // always agree (both rolls kept here so downstream seeds don't shift)
+    const biteRoll = r(); r();
+    r(); // keep seeded RNG sequence stable while eyes are temporarily fixed.
+    const style = "normal";
+    const row = 2 + (r() < 0.5 ? 0 : 1);               // 2 or 3
+    const gap = r() < 0.5 ? 1 : 2;                      // px between the eyes (no 0)
+    // the eye frame refills empty cells next to eyes: gap-1 centered eyes sit
+    // at cols 1-2 / 4-5, leaving only col 7 clear -> random bites are right-
+    // side and gap-1 only; bite-l stays a manual pick
+    if (biteRoll < 0.15 && waist === "straight" && gap === 1 && !slant(top) && !slant(bottom))
+      waist = "bite-r";
+    const align = (r(), "center"); // random eyes stay centered; left/right is a manual control
+    const gaze = { dx: r() < 0.5 ? 0 : 1, dy: r() < 0.6 ? 0 : 1 };
+    // random eyes are always parallel bar pupils (rolls kept so seeds don't shift);
+    // dot pupils and mirrored gaze stay manual picks
+    r(); r();
+    const pupil = "bar";
+    const mirror = false;
+    return { seed: String(seed), colors, gradientDir, gradientMotion, top, bottom, waist,
+      eyes: { style, row, gap, align, gaze, pupil, mirror } };
+  }
+
+  // --- Rasterize: spec -> 8x8 grid of codes (0 empty,1 body,2 white,3 pupil)
+  function moduleByName(group, name) {
+    return group.find((m) => m.name === name) || group[0];
+  }
+
+  function emptyGrid() {
+    return Array.from({ length: 8 }, () => new Array(8).fill(0));
+  }
+
+  // frame = { gaze:{dx,dy}, blink:bool } — optional; defaults to spec's eyes.
+  // Expand a module to full 8-wide rows: symmetric modules mirror their 4-wide
+  // left half; `full` modules already define all 8 columns (asymmetric slants).
+  function expandRows(m) {
+    if (m.full) return m.rows;
+    return m.rows.map((r) => [r[0], r[1], r[2], r[3], r[3], r[2], r[1], r[0]]);
+  }
+
+  function rasterize(spec, frame) {
+    const g = emptyGrid();
+    const rows8 = [
+      ...expandRows(moduleByName(TOPS, spec.top)),       // rows 0-3
+      ...expandRows(moduleByName(BOTTOMS, spec.bottom)), // rows 4-7
+    ];
+    for (let y = 0; y < 8; y++)
+      for (let x = 0; x < 8; x++)
+        if (rows8[y][x]) g[y][x] = 1;
+
+    // Waist: pinch the two middle rows (3,4) inward.
+    if (spec.waist === "pinch" || spec.waist === "narrow") {
+      for (const y of [3, 4]) { g[y][0] = 0; g[y][7] = 0; }
+    }
+    if (spec.waist === "narrow") {
+      for (const y of [3, 4]) { g[y][1] = 0; g[y][6] = 0; }
+    }
+    // one-sided bites (asymmetric on purpose)
+    if (spec.waist === "bite-l") for (const y of [3, 4]) g[y][0] = 0;
+    if (spec.waist === "bite-r") for (const y of [3, 4]) g[y][7] = 0;
+
+    // frame.legShift ∈ {-1,0,1}: nudge the feet sideways (celebrate cycle).
+    // Row 6 shifts along with row 7 when it has gaps (2-row stilts like
+    // tripod2 must move as one piece instead of shearing).
+    if (frame && frame.legShift) {
+      const s = frame.legShift;
+      const shiftRow = (row) => {
+        const out = new Array(8).fill(0);
+        for (let x = 0; x < 8; x++) {
+          const nx = x + s;
+          if (nx >= 0 && nx < 8) out[nx] = row[x];
+        }
+        return out;
+      };
+      g[7] = shiftRow(g[7]);
+      if (g[6].includes(0)) g[6] = shiftRow(g[6]);
+    }
+
+    stampEyes(g, spec, frame);
+    return g;
+  }
+
+  // Left column for an eye group of total width `totalW`. Alignment is a gentle
+  // 1px nudge off-center, clamped to stay off the edges (so eyes never jam into
+  // a corner and read as lopsided).
+  function eyeStart(totalW, align) {
+    const center = Math.floor((8 - totalW) / 2);
+    const s = align === "left" ? center - 1 : align === "right" ? center + 1 : center;
+    return Math.min(7 - totalW, Math.max(1, s));
+  }
+
+  function eyeCellsFor(style, row, gap, align) {
+    if (style === "visor" || style === "visor2") {
+      const rows = style === "visor2" ? [row, row + 1] : [row];
+      const cells = [];
+      for (const y of rows) for (let x = 0; x < 8; x++) cells.push([x, y]);
+      return cells;
+    }
+    const w = style === "tall" ? 1 : 2;
+    const h = style === "short" ? 1 : 2;
+    const leftStart = eyeStart(2 * w + gap, align);
+    const bases = [leftStart, leftStart + w + gap];
+    const cells = [];
+    for (const bx of bases)
+      for (let ey = 0; ey < h; ey++)
+        for (let ex = 0; ex < w; ex++) cells.push([bx + ex, row + ey]);
+    return cells;
+  }
+
+  function topFrameConflict(g, spec, row, gap, align, style) {
+    const symBody = spec.waist.indexOf("bite") !== 0 &&
+      !moduleByName(TOPS, spec.top).full && !moduleByName(BOTTOMS, spec.bottom).full;
+    for (const [x, y] of eyeCellsFor(style, row, gap, align))
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++) {
+          const ny = y + dy, nx = x + dx;
+          if (ny < 0 || ny > 2) continue;
+          for (const cx of symBody ? [nx, 7 - nx] : [nx])
+            if (cx >= 0 && cx < 8 && g[ny][cx] === 0) return true;
+        }
+    return false;
+  }
+
+  function effectiveEyeRow(g, spec, gap, align, style) {
+    let row = spec.eyes.row;
+    const h = style === "short" || style === "visor" ? 1 : 2;
+    while (row + h - 1 < 7 && topFrameConflict(g, spec, row, gap, align, style)) row++;
+    return row;
+  }
+
+  function stampEyes(g, spec, frame) {
+    const gaze = (frame && frame.gaze) || spec.eyes.gaze || { dx: 0, dy: 0 };
+    // blink phases: 0 open · 1 squint (slit + pupil) · 2 closed (dark lid line);
+    // legacy boolean true = fully closed
+    const blink = frame && frame.blink === true ? 2 : (frame && frame.blink) || 0;
+    const gap = spec.eyes.gap || 1;      // px between the eyes
+    const align = spec.eyes.align || "center";
+    const style = spec.eyes.style;
+    const r0 = effectiveEyeRow(g, spec, gap, align, style); // top row of the eye
+
+    // Guarantee a 1px solid body frame: any empty cell touching an eye cell
+    // (incl. the cell itself) becomes body, so eyes never touch an edge/empty.
+    // On symmetric bodies the fill is mirrored so gap-1 (off-center) eyes can't
+    // skew the silhouette; asymmetric bodies (slants, bites) fill plainly so
+    // the deliberate asymmetry isn't repaired.
+    const symBody = spec.waist.indexOf("bite") !== 0 &&
+      !moduleByName(TOPS, spec.top).full && !moduleByName(BOTTOMS, spec.bottom).full;
+    const frameBody = (cells) => {
+      for (const [x, y] of cells)
+        for (let dy = -1; dy <= 1; dy++)
+          for (let dx = -1; dx <= 1; dx++) {
+            const ny = y + dy, nx = x + dx;
+            if (ny < 0 || ny > 7) continue;
+            for (const cx of symBody ? [nx, 7 - nx] : [nx])
+              if (cx >= 0 && cx < 8 && g[ny][cx] === 0) g[ny][cx] = 1;
+          }
+    };
+
+    // visor (1px band) / visor2 (2px band): black band(s) + two white holes.
+    if (style === "visor" || style === "visor2") {
+      const rows = style === "visor2" ? [r0, r0 + 1] : [r0];
+      const band = [];
+      for (const ry of rows) for (let x = 0; x < 8; x++) if (g[ry][x] !== 0) band.push([x, ry]);
+      frameBody(band);
+      const ls = eyeStart(2 + gap, align);
+      for (const ry of rows) {
+        for (let x = 0; x < 8; x++) if (g[ry][x] === 1) g[ry][x] = 3;
+        for (const ex of [ls, ls + 1 + gap]) if (g[ry][ex] === 3) g[ry][ex] = 2;
+      }
+      return;
+    }
+
+    // normal = 2x2 · short = 2x1 (pupil slides sideways) · tall = 1x2 (rests low)
+    const w = style === "tall" ? 1 : 2;
+    const h = style === "short" ? 1 : 2;
+    const mirror = !!spec.eyes.mirror;                         // right eye flips its pupil
+    const bar = spec.eyes.pupil === "bar" && style === "normal"; // 1x2 column pupil
+    const leftStart = eyeStart(2 * w + gap, align);
+    const bases = [leftStart, leftStart + w + gap];
+    const cells = [];
+    for (const bx of bases)
+      for (let ey = 0; ey < h; ey++)
+        for (let ex = 0; ex < w; ex++) cells.push([bx + ex, r0 + ey]);
+    frameBody(cells);                          // solid body around + behind the eyes
+    const lidRow = r0 + h - 1;                 // the row the eyelid closes onto
+    if (blink === 2) {
+      // closed: the eye region is body except a dark lid line
+      for (const [x, y] of cells) g[y][x] = y === lidRow ? 3 : 1;
+      return;
+    }
+    // open (all white) or squint (only the lid row stays open)
+    for (const [x, y] of cells) g[y][x] = blink === 1 && y !== lidRow ? 1 : 2;
+    bases.forEach((bx, i) => {
+      let pdx = w === 1 ? 0 : gaze.dx > 0 ? 1 : 0;
+      if (mirror && i === 1 && w === 2) pdx = 1 - pdx;
+      if (blink === 1) { g[lidRow][bx + pdx] = 3; return; } // 1px pupil in the slit
+      const py = h === 1 ? r0
+        : w === 1 ? r0 + (gaze.dy < 0 ? 0 : 1)   // tall eyes rest low
+        : r0 + (gaze.dy > 0 ? 1 : 0);
+      if (bar) { g[r0][bx + pdx] = 3; g[r0 + 1][bx + pdx] = 3; }
+      else g[py][bx + pdx] = 3;                  // pupil
+    });
+  }
+
+  // --- Self test: sweep invariants over many generated critters ----------
+  function selfTest() {
+    const failures = [];
+    for (let i = 0; i < 300; i++) {
+      const spec = generate("seed-" + i);
+      const g = rasterize(spec);
+      if (g.length !== 8 || g.some((r) => r.length !== 8)) failures.push([i, "size"]);
+      let symOk = true, hasWhite = false, hasPupil = false;
+      for (let y = 0; y < 8; y++)
+        for (let x = 0; x < 8; x++) {
+          const c = g[y][x];
+          if (![0, 1, 2, 3].includes(c)) failures.push([i, "code", x, y]);
+          if ((g[y][x] !== 0) !== (g[y][7 - x] !== 0)) symOk = false; // silhouette
+          if (c === 2) hasWhite = true;
+          if (c === 3) hasPupil = true;
+        }
+      const symmetric = !moduleByName(TOPS, spec.top).full && !moduleByName(BOTTOMS, spec.bottom).full &&
+        spec.waist.indexOf("bite") !== 0;
+      if (!symOk && symmetric) failures.push([i, "symmetry"]);
+      if (!hasWhite || !hasPupil) failures.push([i, "eyes"]);
+      // every eye cell keeps a 1px solid frame (no empty neighbor)
+      for (let y = 0; y < 8; y++)
+        for (let x = 0; x < 8; x++) {
+          if (g[y][x] !== 2 && g[y][x] !== 3) continue;
+          for (let dy = -1; dy <= 1; dy++)
+            for (let dx = -1; dx <= 1; dx++) {
+              const ny = y + dy, nx = x + dx;
+              if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8 && g[ny][nx] === 0)
+                failures.push([i, "eye-frame", x, y]);
+            }
+        }
+      if (JSON.stringify(g) !== JSON.stringify(rasterize(generate("seed-" + i))))
+        failures.push([i, "determinism"]);
+    }
+    return { passed: failures.length === 0, failures };
+  }
+
+  // --- Pure render helpers (DOM-free; canvas painting lives in the page) ---
+  // hex "#rrggbb" -> [r,g,b]
+  function hexToRgb(h) {
+    h = h.replace("#", "");
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  }
+  function lerpHex(a, b, t) {
+    const ca = hexToRgb(a), cb = hexToRgb(b);
+    const f = (v) => ("0" + Math.round(v).toString(16)).slice(-2);
+    return "#" + f(ca[0] + (cb[0] - ca[0]) * t) + f(ca[1] + (cb[1] - ca[1]) * t) + f(ca[2] + (cb[2] - ca[2]) * t);
+  }
+  // Linear multi-stop blend: t=0 -> colors[0], t=1 -> colors[last] (a clean ramp).
+  function multiLerp(colors, t) {
+    if (colors.length === 1) return colors[0];
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const seg = t * (colors.length - 1);
+    const i = Math.min(colors.length - 2, Math.floor(seg));
+    return lerpHex(colors[i], colors[i + 1], seg - i);
+  }
+  // Gradient body paint over 1-3 selected colors. `dir` lays out the blend; `motion`
+  // animates it subtly over `frame`:
+  //   static = fixed · drift = slow scroll · pulse = gentle breathing
+  //   · sheen = a soft highlight band sweeps across · scan-y = smooth vertical scan.
+  function gradientPaint(colors, dir, motion, frame) {
+    const BANDS = 5;
+    const pos = (x, y) =>
+      dir === "none"           ? 0 :
+      dir === "diagonal-left"  ? (7 - x + y) / 14 :
+      dir === "radial"         ? Math.min(1, Math.hypot(x - 3.5, y - 3.5) / 4.95) :
+                                 (x + y) / 14;
+    return (x, y) => {
+      let u = pos(x, y);
+      if (motion === "drift") u += Math.sin(frame / 30) * 0.18;      // gentle slide
+      else if (motion === "pulse") u += Math.sin(frame / 22) * 0.12; // gentle breathe
+      const band = Math.round((u < 0 ? 0 : u > 1 ? 1 : u) * BANDS) / BANDS;
+      let col = multiLerp(colors, band);
+      if (motion === "sheen") {
+        const phase = (frame / 28) % 2;
+        const center = phase <= 1 ? phase : 2 - phase; // forward then backward
+        const amt = Math.max(0, 1 - Math.abs(pos(x, y) - center) * 6) * 0.22;
+        if (amt > 0) col = lerpHex(col, "#ffffff", amt);
+      } else if (motion === "scan-y") {
+        const phase = (frame / 18) % 2;
+        const scanY = (phase <= 1 ? phase : 2 - phase) * 7;
+        const dist = Math.abs(y - scanY);
+        const amt = Math.max(0, 1 - dist / 1.35) * 0.28;
+        if (amt > 0) col = lerpHex(col, "#ffffff", amt);
+      }
+      return col;
+    };
+  }
+  // Body paint may be a flat hex string OR a per-cell function (x,y)->hex.
+  // Eyes are always white/black.
+  function cellFill(code, paint, x, y) {
+    if (code === 1) return typeof paint === "function" ? paint(x, y) : paint;
+    if (code === 2) return "#ffffff";
+    if (code === 3) return "#000000";
+    return null;
+  }
+  // Serialize an 8x8 grid to an SVG string (one <rect> per filled cell).
+  function toSVG(grid, paint, scale) {
+    const s = scale || 1;
+    let rects = "";
+    for (let y = 0; y < 8; y++)
+      for (let x = 0; x < 8; x++) {
+        const fill = cellFill(grid[y][x], paint, x, y);
+        if (!fill) continue;
+        rects += `<rect x="${x * s}" y="${y * s}" width="${s}" height="${s}" fill="${fill}"/>`;
+      }
+    return (
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${8 * s}" height="${8 * s}" ` +
+      `viewBox="0 0 ${8 * s} ${8 * s}" shape-rendering="crispEdges">${rects}</svg>`
+    );
+  }
+
+  // --- Spec <-> string codec (shareable URLs) ------------------------------
+  // "~"-delimited, versioned. The seed is URI-encoded with "~" forced to %7E
+  // so it can never collide with the delimiter.
+  const encSeed = (s) => encodeURIComponent(s).replace(/~/g, "%7E");
+  function specToString(spec) {
+    return [
+      "2",
+      encSeed(spec.seed),
+      spec.colors.map((c) => PALETTE.findIndex((p) => p.name === c.name)).join(""),
+      DIRS.indexOf(spec.gradientDir),
+      MOTIONS.indexOf(spec.gradientMotion),
+      TOPS.findIndex((m) => m.name === spec.top),
+      BOTTOMS.findIndex((m) => m.name === spec.bottom),
+      WAISTS.indexOf(spec.waist),
+      EYE_STYLES.indexOf(spec.eyes.style),
+      spec.eyes.row,
+      spec.eyes.gap,
+      ALIGNS.indexOf(spec.eyes.align || "center"),
+      (spec.eyes.gaze.dx + 1) * 3 + (spec.eyes.gaze.dy + 1),
+      PUPILS.indexOf(spec.eyes.pupil || "dot"),
+      spec.eyes.mirror ? 1 : 0,
+    ].join("~");
+  }
+  function specFromString(str) {
+    const p = String(str).split("~");
+    // v2 adds pupil + mirror; v1 links keep working with safe defaults
+    const v2 = p[0] === "2" && p.length === 15;
+    if (!v2 && !(p[0] === "1" && p.length === 13)) return null;
+    // strict: every field after the seed is plain digits — rejects "", " 4",
+    // "4.5", "0x1" so one permalink string means exactly one spec
+    if (!p.slice(2).every((v) => /^\d+$/.test(v))) return null;
+    const idx = (v, arr) => { const i = +v; return Number.isInteger(i) && i >= 0 && i < arr.length ? i : -1; };
+    const colors = [...p[2]].map((d) => PALETTE[+d]).filter(Boolean);
+    const di = idx(p[3], DIRS), mi = idx(p[4], MOTIONS), ti = idx(p[5], TOPS),
+          bi = idx(p[6], BOTTOMS), wi = idx(p[7], WAISTS), si = idx(p[8], EYE_STYLES),
+          ai = idx(p[11], ALIGNS);
+    const row = +p[9], gap = +p[10], gz = +p[12];
+    if (colors.length < 1 || colors.length !== p[2].length) return null;
+    if ([di, mi, ti, bi, wi, si, ai].includes(-1)) return null;
+    if (![2, 3].includes(row) || ![1, 2].includes(gap) || !(gz >= 0 && gz <= 8)) return null;
+    const pi = v2 ? idx(p[13], PUPILS) : 0;
+    if (pi === -1 || (v2 && !["0", "1"].includes(p[14]))) return null;
+    let seed;
+    try { seed = decodeURIComponent(p[1]); } catch { return null; }
+    return {
+      seed,
+      colors,
+      gradientDir: DIRS[di],
+      gradientMotion: "static",
+      top: TOPS[ti].name,
+      bottom: BOTTOMS[bi].name,
+      waist: WAISTS[wi],
+      eyes: {
+        style: EYE_STYLES[si], row, gap, align: ALIGNS[ai],
+        gaze: { dx: Math.floor(gz / 3) - 1, dy: (gz % 3) - 1 },
+        pupil: PUPILS[pi], mirror: v2 && p[14] === "1",
+      },
+    };
+  }
+
+  return {
+    VERSION, PALETTE, TOPS, BOTTOMS, generate, randomSeed, rasterize, selfTest,
+    cellFill, gradientPaint, toSVG, specToString, specFromString,
+    _test: { rng, multiLerp },
+  };
+})();
+</script>
+<!-- SYCRITTERS-ENGINE:END -->
+
+<script>
+/* =====================================================================
+   critter-test page logic
+   - reuses the Sycritters engine (generate / rasterize / paint) verbatim
+   - adds: perch-on-composer placement, a proximity-driven motion state
+     machine (idle / walk / jump-for-cursor / think / celebrate), a
+     simplified click-to-customise popup, and a live cost readout.
+   Efficiency notes are inline where they matter.
+   ===================================================================== */
+(function () {
+  "use strict";
+  const S = globalThis.Sycritters;
+  const { generate, rasterize, cellFill, gradientPaint, PALETTE, TOPS, BOTTOMS, specToString, specFromString } = S;
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)");
+  const now = () => performance.now();
+  const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
+
+  /* ---- geometry: the critter is an 8x8 sprite drawn at CELL px/cell ---- */
+  const CELL = 4;          // device px per critter pixel (smaller critter)
+  const PAD_TOP = 6;       // headroom cells above the body (bob / squash overshoot)
+  const PAD_SIDE = 3;
+  const SPRITE_W = (8 + 2 * PAD_SIDE) * CELL;   // 56
+  const SPRITE_H = (PAD_TOP + 8) * CELL;        // 56, feet flush with the canvas bottom
+  const BODY = 8 * CELL;                        // 32, the visible critter box
+  const snapCell = (v) => Math.round(v / CELL) * CELL;  // quantise motion to whole critter-pixels
+
+  const composer = document.getElementById("composer");
+  const canvas = document.getElementById("critter");
+  canvas.width = SPRITE_W; canvas.height = SPRITE_H;
+  const ctx = canvas.getContext("2d");
+  ctx.imageSmoothingEnabled = false;
+  const baseY = -SPRITE_H;  // lift the canvas so the feet line sits on the composer's top edge
+
+  /* ---- spec (the critter identity) ------------------------------------ */
+  // normalise every critter: 2x2 eyes, and never a waist "notch"/bite (chip removed)
+  const force2x2Eyes = (s) => ({
+    ...s,
+    waist: (s.waist === "bite-l" || s.waist === "bite-r") ? "straight" : s.waist,
+    eyes: { ...s.eyes, style: "normal", pupil: "dot" },  // dot pupils -> 2 black pixels that track 4 ways
+  });
+  const randSeed = () => Math.floor(Math.random() * 0x100000000).toString(36);
+  function specFromURL() {
+    const m = location.search.match(/[?&]c=([^&]+)/);
+    return (m && specFromString(m[1])) || null;
+  }
+  let spec = force2x2Eyes(specFromURL() || generate(randSeed()));
+
+  const hexes = () => spec.colors.map((c) => c.hex);
+  let staticPaint = gradientPaint(hexes(), spec.gradientDir, "static", 0);
+
+  // Rasterized grids are memoized by pose key — kills the per-frame rasterize
+  // cost so a redraw is just the (<=64 cell) fill loop.
+  let gridCache = new Map();
+  function gridFor(gaze, blink, legShift) {
+    const key = gaze.dx + "," + gaze.dy + "," + blink + "," + legShift;
+    let g = gridCache.get(key);
+    if (!g) { g = rasterize(spec, { gaze, blink, legShift }); gridCache.set(key, g); }
+    return g;
+  }
+  function applySpec(next) {
+    spec = force2x2Eyes(next);
+    gridCache = new Map();
+    staticPaint = gradientPaint(hexes(), spec.gradientDir, "static", 0);
+    lastDrawKey = null;
+    try { history.replaceState(null, "", "?c=" + specToString(spec)); } catch (e) {}
+    syncPopup();
+    wake();
+    if (reduced.matches) drawStatic();
+  }
+
+  /* ---- painting -------------------------------------------------------- */
+  function paint(grid, p, t, flip) {
+    const dx = t.dx || 0, dy = t.dy || 0;
+    const sq = t.squashY == null ? 1 : t.squashY;
+    const sqx = t.squashX == null ? 1 : t.squashX;   // horizontal squash (drives the spin)
+    const w = Math.max(1, Math.ceil(CELL * sqx));
+    ctx.clearRect(0, 0, SPRITE_W, SPRITE_H);
+    for (let y = 0; y < 8; y++)
+      for (let x = 0; x < 8; x++) {
+        const sx = flip ? 7 - x : x;                 // mirror the body to face the other way
+        const fill = cellFill(grid[y][sx], p, x, y);
+        if (!fill) continue;
+        ctx.fillStyle = fill;
+        const px = Math.round((3.5 + (x - 3.5) * sqx + PAD_SIDE + dx) * CELL);  // scale about the centre
+        const py = Math.round((y * sq + 8 * (1 - sq) + PAD_TOP + dy) * CELL);
+        ctx.fillRect(px, py, w, Math.ceil(CELL * sq));
+      }
+  }
+
+  /* ---- world state ----------------------------------------------------- */
+  const bounds = () => {
+    const w = composer.clientWidth;
+    return { min: 4, max: Math.max(4, w - SPRITE_W - 4) };
+  };
+  const homeX = () => { const b = bounds(); return Math.max(b.min, snapCell(b.max - 8)); }; // rests top-right
+  let x = homeX();
+  let targetX = x;
+  let facing = -1;               // -1 faces left, +1 faces right (mirrors the sprite)
+  let legPhase = 0;              // 0..3 walk-cycle frame, advances one per pixel-step
+  let stepAcc = 0;               // ms accumulator for whole-pixel stepping
+  let curLift = 0;               // current jump height (for hit-testing + distance)
+  let jump = null;               // { t0, dur, reach } — a leap toward the mouse
+  let lastJumpEnd = -1e9;
+  let react = null;              // { kind, t0, dur } — a "caught you!" celebration
+  let lastReactEnd = -1e9;
+  let lastT = now();
+
+  // mouse (passive listener only stores coordinates; all math runs in the tick)
+  let mx = -1e9, my = -1e9, mouseMoved = -1e9, mouseIn = false;
+  addEventListener("mousemove", (e) => { mx = e.clientX; my = e.clientY; mouseMoved = now(); mouseIn = true; wake(); }, { passive: true });
+  addEventListener("mouseleave", () => { mouseIn = false; });
+
+  // typing / submit
+  const ta = document.getElementById("ta");
+  let lastType = -1e9, thinkUntil = 0, celebrateUntil = 0;
+  ta.addEventListener("input", () => { lastType = now(); autosize(); wake(); });
+  ta.addEventListener("focus", wake);
+  function autosize() { ta.style.height = "auto"; ta.style.height = Math.min(160, ta.scrollHeight) + "px"; }
+  function submit() {
+    const v = ta.value.trim();
+    if (!v) return;
+    ta.value = ""; autosize();
+    const t = now();
+    celebrateUntil = t + 950;     // a little hop of triumph
+    thinkUntil = t + 2400;        // then "thinking" about the answer
+    wake();
+  }
+  ta.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } });
+  document.getElementById("send").addEventListener("click", submit);
+
+  // eyes blink on a global timer (~every 4s while engaged); at rest a 30s timer wakes one.
+  let nextBlink = now() + 2500, blinkStart = -1e9;
+  // rest micro-animations: when the mouse is far the critter sits at home and breathes / blinks.
+  let restAnim = null, restAnimStart = 0, restAnimUntil = 0, restTimer = null;
+
+  /* ---- tuning ---------------------------------------------------------- */
+  const ENGAGE_R = 100;       // mouse must be within 100px of the critter to engage
+  const TOOL_R = 20;          // within 20px -> show the chat/settings toolbar (and stay calm)
+  const CATCH_R = 34;         // "caught up" -> a special celebration
+  const JUMP_LO = 45, JUMP_HI = 80;  // from this mid-range it can leap toward the mouse
+  const JUMP_COOLDOWN = 1100; // ms between leaps
+  const REACT_COOLDOWN = 2000;// ms between celebrations while the cursor lingers
+  const MAX_WALK = 165;       // px/s — and it SPEEDS UP as it nears the mouse
+  const RETURN_SPEED = 90;    // px/s strolling back home
+  const REST_ANIM_MS = 30000; // a small idle animation roughly every 30s
+
+  /* ---- the motion state machine --------------------------------------- */
+  function decide(t, geo) {
+    if (t < celebrateUntil) return "celebrate";
+    if (document.activeElement === ta && (t - lastType < 2500 || t < thinkUntil)) return "think";
+    if (react) { if (t - react.t0 >= react.dur) { react = null; lastReactEnd = t; } else return "react"; }
+    if (jump)  { if (t - jump.t0  >= jump.dur)  { jump  = null; lastJumpEnd  = t; } else return "jump"; }
+    const moused = mouseIn && (t - mouseMoved) < 2000;
+    const busy = toolsShown || chatOpen || popupOpen;       // a panel is up -> stay calm
+    if (moused && !busy && geo.d < CATCH_R && geo.d > TOOL_R && (t - lastReactEnd) > REACT_COOLDOWN) {
+      react = startReact(t, geo);                           // caught up -> celebrate
+      return "react";
+    }
+    if (moused && !busy && geo.d >= JUMP_LO && geo.d <= JUMP_HI && (t - lastJumpEnd) > JUMP_COOLDOWN) {
+      const reach = clamp(geo.cy - my, 10, 48);
+      jump = { t0: t, dur: 420, reach };                    // leap toward the mouse to close the gap
+      const f = Math.sign(mx - geo.cx); if (f) facing = f;
+      return "jump";
+    }
+    if (moused && geo.d < ENGAGE_R) return "follow";        // mouse in the zone -> follow it
+    if (Math.abs(x - homeX()) >= CELL) return "return";     // mouse gone -> head home
+    return "rest";                                          // home + dormant
+  }
+
+  // pick a random "caught you!" celebration (jump is a separate traversal move)
+  function startReact(t, geo) {
+    const kind = ["excited", "wiggle", "dance", "nod", "spin"][Math.floor(Math.random() * 5)];
+    const f = Math.sign(mx - geo.cx); if (f) facing = f;     // celebrate toward the cursor
+    const dur = { excited: 900, wiggle: 760, dance: 1000, nod: 720, spin: 720 }[kind];
+    return { kind, t0: t, dur };
+  }
+
+  function geometry() {
+    const r = composer.getBoundingClientRect();   // one read per tick
+    const cx = r.left + x + SPRITE_W / 2;
+    const cy = r.top - BODY / 2 + curLift;
+    return { r, cx, cy, d: Math.hypot(mx - cx, my - cy), mouseAbove: my < r.top + 4 };
+  }
+
+  // Build the per-frame pose: { gaze, blink, legShift, T:{dx,dy,squashY}, p, lift }
+  function pose(state, t, geo) {
+    const f12 = Math.floor(t / (1000 / 12));    // 12fps stepped clock (pixel-art timing)
+    let legShift = 0, flipOverride;             // gaze + blink are owned by the loop (eyes track the pointer)
+    let T = { dx: 0, dy: 0, squashY: 1, squashX: 1 }, p = staticPaint, lift = 0;
+
+    if (state === "celebrate") {
+      const k = f12 % 8;
+      T.dy = [0, -2, 0, -2, 0, -2, 0, -2][k];
+      T.squashY = [0.9, 1, 0.9, 1, 0.9, 1, 0.9, 1][k];
+      p = gradientPaint(hexes(), spec.gradientDir, "sheen", t / 12);
+    } else if (state === "think") {
+      p = gradientPaint(hexes(), spec.gradientDir, "pulse", t / 12);
+    } else if (state === "jump") {
+      const ph = clamp((t - jump.t0) / jump.dur, 0, 1);
+      lift = -Math.sin(ph * Math.PI) * jump.reach;          // arc; horizontal travel handled in step()
+      T.squashY = ph < 0.12 ? 0.84 : ph > 0.9 ? 0.82 : 1;   // crouch + landing squash
+    } else if (state === "react") {                         // a "caught you!" celebration
+      const fr = Math.floor((t - react.t0) / (1000 / 12));
+      if (react.kind === "excited") {
+        const k = fr % 8;
+        T.dy = [0, -2, 0, -2, 0, -2, 0, -2][k];
+        T.squashY = [0.9, 1, 0.9, 1, 0.9, 1, 0.9, 1][k];
+        p = gradientPaint(hexes(), spec.gradientDir, "sheen", t / 12);
+      } else if (react.kind === "wiggle") {
+        const k = fr % 8;
+        T.dx = [0, 1, 0, -1, 0, 1, 0, -1][k];
+        T.squashY = [1, 0.94, 1, 0.94, 1, 0.94, 1, 0.94][k];
+      } else if (react.kind === "dance") {
+        const k = fr % 8;
+        T.dx = [0, 1, 1, 0, 0, -1, -1, 0][k];
+        T.dy = [0, -1, 0, 0, 0, -1, 0, 0][k];
+        T.squashY = [1, 0.88, 1, 1, 1, 0.88, 1, 1][k];
+        legShift = [0, -1, -1, 0, 0, 1, 1, 0][k];
+      } else if (react.kind === "nod") {
+        T.dy = [0, 1, 1, 0, 0, 1, 1, 0][fr % 8];
+      } else if (react.kind === "spin") {
+        const ph = clamp((t - react.t0) / react.dur, 0, 1);
+        const ang = ph * Math.PI * 2;                        // one full turn
+        T.squashX = Math.abs(Math.cos(ang));                 // body narrows to a line, then widens...
+        flipOverride = Math.cos(ang) < 0;                    // ...flipping through the midpoint
+        T.dy = -Math.round(Math.sin(ph * Math.PI) * 2);      // a little hop through the spin
+      }
+    } else if (state === "follow" || state === "return") {
+      legShift = [-1, 0, 1, 0][legPhase];                   // feet step; no vertical bob
+    } else { // rest: dormant at home, with an occasional breath
+      if (t < restAnimUntil && restAnim === "bob") T.dy = [0, -1, -1, 0][Math.floor((t - restAnimStart) / 90) % 4];
+    }
+    return { legShift, T, p, lift, flipOverride, animated: state === "think" || state === "celebrate" || state === "react" };
+  }
+
+  /* ---- the loop -------------------------------------------------------- */
+  let active = false, lastDrawKey = null;
+  let perfSum = 0, perfN = 0, perfFrames = 0, perfT0 = now();
+
+  function step() {
+    const t = now();
+    const dt = clamp(t - lastT, 0, 60) / 1000;
+    lastT = t;
+    const geo = geometry();
+    const state = decide(t, geo);
+    const b = bounds();
+
+    // target x
+    if (state === "follow" || state === "jump") targetX = clamp(mx - geo.r.left - SPRITE_W / 2, b.min, b.max);
+    else if (state === "return") targetX = homeX();
+    else targetX = x;
+    if (popupOpen || chatOpen || toolsShown) targetX = x;   // hold still while interacting
+
+    // Speed: following SPEEDS UP as it nears the mouse; a leap travels fast across;
+    // returning is a steady stroll. All in WHOLE pixels, so no sub-pixel shimmer.
+    let speed = 0;
+    if (state === "follow") speed = clamp(1 - geo.d / ENGAGE_R, 0.35, 1) * MAX_WALK;
+    else if (state === "jump") speed = 230;                  // leap toward the mouse
+    else if (state === "return") speed = RETURN_SPEED;
+    if (speed > 0 && Math.abs(targetX - x) >= CELL) {
+      const interval = 1000 / (speed / CELL);    // ms per whole-pixel step
+      stepAcc += dt * 1000;
+      let guard = 0;
+      while (stepAcc >= interval && Math.abs(targetX - x) >= CELL && guard++ < 12) {
+        const dir = Math.sign(targetX - x);
+        x += dir * CELL; facing = dir;           // step one critter-pixel, face that way
+        legPhase = (legPhase + 1) % 4;
+        stepAcc -= interval;
+      }
+    } else {
+      stepAcc = 0;
+      if (state !== "jump") legPhase = 0;        // standing: feet together
+      if (state === "follow") { const f = Math.sign(mx - geo.cx); if (f) facing = f; }
+    }
+    x = clamp(x, b.min, b.max);
+
+    // render
+    const ps = pose(state, t, geo);
+    curLift = ps.lift;
+    const flip = ps.flipOverride != null ? ps.flipOverride : (facing < 0);
+
+    // Eyes: the two dot pupils always look toward the pointer (compensated for the body
+    // flip); blink is layered on top on a global timer, wherever the eyes happen to be.
+    let lookDx = 0, lookDy = 0;
+    if (mouseIn) { lookDx = Math.sign(mx - geo.cx); lookDy = Math.sign(my - geo.cy); }
+    const gazeDx = flip ? -lookDx : lookDx;
+    if (state !== "rest" && t > nextBlink) { blinkStart = t; nextBlink = t + 3200 + Math.random() * 3200; }
+    const bp = t - blinkStart;
+    const blink = (bp >= 0 && bp < 300) ? (bp < 70 ? 1 : bp < 230 ? 2 : 1) : 0;
+
+    const a = now();
+    const grid = gridFor({ dx: gazeDx, dy: lookDy }, blink, ps.legShift);
+    const drawKey = ps.animated ? "a" + Math.floor(t / (1000 / 12))
+      : [gazeDx, lookDy, blink, ps.legShift, Math.round(ps.T.dy), Math.round(ps.T.squashY * 100), Math.round(ps.T.squashX * 100), flip ? 1 : 0].join(",");
+    if (ps.animated || drawKey !== lastDrawKey) {     // only repaint when the sprite actually changes
+      paint(grid, ps.p, ps.T, flip);
+      lastDrawKey = drawKey;
+      perfSum += now() - a; perfN++;
+    }
+    // position is compositor-only (transform), snapped to whole critter-pixels
+    canvas.style.transform = "translate3d(" + snapCell(x) + "px," + (baseY + snapCell(ps.lift)) + "px,0)";
+    updateTools(geo);
+
+    // perf readout once a second
+    perfFrames++;
+    if (t - perfT0 >= 1000) {
+      const avg = perfN ? perfSum / perfN : 0;
+      perf.textContent = "critter cost: " + avg.toFixed(3) + " ms/repaint · " + perfN + " repaints/s · loop " + perfFrames + " fps";
+      window.__critterPerf = { msPerRepaint: +avg.toFixed(4), repaintsPerSec: perfN, loopFps: perfFrames };
+      perfSum = perfN = perfFrames = 0; perfT0 = t;
+    }
+
+    // Park the loop once the critter is home and dormant; a timer wakes it for the
+    // occasional rest animation, and any mouse move / focus wakes it instantly.
+    const blinking = (t - blinkStart) < 300;
+    if (state === "rest" && t >= restAnimUntil && !blinking && !popupOpen) { active = false; scheduleRestAnim(); return; }
+    requestAnimationFrame(step);
+  }
+
+  function wake() {
+    if (reduced.matches) { drawStatic(); return; }
+    if (!active) { active = true; lastT = now(); requestAnimationFrame(step); }
+  }
+
+  // While dormant at home, fire a small animation about every REST_ANIM_MS.
+  function scheduleRestAnim() {
+    if (restTimer || reduced.matches) return;
+    restTimer = setTimeout(() => {
+      restTimer = null;
+      if (Math.random() < 0.6) { blinkStart = now(); nextBlink = now() + REST_ANIM_MS; } // a slow blink
+      else { restAnim = "bob"; restAnimStart = now(); restAnimUntil = now() + 700; }       // a breath
+      wake();
+    }, REST_ANIM_MS);
+  }
+
+  function drawStatic() {  // reduced-motion: one resting frame, no loop
+    const grid = gridFor({ dx: 0, dy: 0 }, 0, 0);
+    paint(grid, staticPaint, { dy: 0, squashY: 1 }, facing < 0);
+    const b = bounds();
+    x = clamp(x, b.min, b.max);
+    canvas.style.transform = "translate3d(" + snapCell(x) + "px," + baseY + "px,0)";
+  }
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) active = false;        // no work on a hidden tab
+    else wake();
+  });
+  addEventListener("resize", () => { const b = bounds(); x = clamp(x, b.min, b.max); wake(); });
+
+  /* ---- click-to-customise popup --------------------------------------- */
+  const pop = document.getElementById("pop");
+  const hint = document.getElementById("hint");
+  const critTools = document.getElementById("critTools");
+  const chatpop = document.getElementById("chatpop");
+  let popupOpen = false, hintShown = false, toolsShown = false, toolsOver = false, chatOpen = false;
+
+  function critterScreenBox() {
+    const r = composer.getBoundingClientRect();
+    return { x: r.left + snapCell(x) + PAD_SIDE * CELL, y: r.top - BODY + curLift, w: BODY, h: BODY };
+  }
+  // Show the chat/settings toolbar above the critter when the pointer is within
+  // TOOL_R; keep it up (hysteresis) while you reach for it, so it's clickable.
+  function updateTools(geo) {
+    if (reduced.matches || popupOpen || chatOpen) { critTools.classList.remove("show"); toolsShown = false; return; }
+    const near = mouseIn && geo.d <= TOOL_R;
+    const keep = toolsShown && (geo.d <= 90 || toolsOver);
+    toolsShown = near || keep;
+    if (toolsShown) {
+      dismissHint();
+      const box = critterScreenBox();
+      critTools.style.left = (box.x + box.w / 2) + "px";
+      critTools.style.top = (box.y - 6) + "px";
+      critTools.classList.add("show");
+    } else critTools.classList.remove("show");
+  }
+  critTools.addEventListener("mouseenter", () => { toolsOver = true; });
+  critTools.addEventListener("mouseleave", () => { toolsOver = false; });
+
+  // toolbar actions
+  document.getElementById("toolChat").addEventListener("click", (e) => { e.stopPropagation(); openChat(); });
+  document.getElementById("toolSettings").addEventListener("click", (e) => { e.stopPropagation(); openPopup(); });
+  // a click outside an open panel closes it
+  addEventListener("click", (e) => {
+    if (popupOpen && !pop.contains(e.target)) closePopup();
+    if (chatOpen && !chatpop.contains(e.target) && !critTools.contains(e.target)) closeChat();
+  });
+
+  function openPopup() {
+    popupOpen = true;
+    toolsShown = false; critTools.classList.remove("show");
+    dismissHint();
+    syncPopup();
+    const box = critterScreenBox();
+    // prefer above the critter; flip below if it would clip the top
+    let top = box.y - 12 - pop.offsetHeight;
+    if (top < 8) top = box.y + box.h + 12;
+    pop.style.left = clamp(box.x + box.w / 2 - 116, 8, innerWidth - 240) + "px";
+    pop.style.top = top + "px";
+    pop.classList.add("open");
+    // measure again now that it's visible, then re-place vertically
+    let top2 = box.y - 12 - pop.offsetHeight;
+    pop.style.top = (top2 < 8 ? box.y + box.h + 12 : top2) + "px";
+    wake();
+  }
+  function closePopup() { popupOpen = false; pop.classList.remove("open"); wake(); }
+  document.getElementById("popX").addEventListener("click", closePopup);
+
+  /* ---- Forge help chat ------------------------------------------------- */
+  const FAQ = [
+    ["What is Forge?", "Forge by Sycamore turns a conversation into a live, interactive page. Describe what you want — like the prospect map above — and Forge builds it, ready to edit and share."],
+    ["How do I share a page?", "Use the share button at the top-right. Anyone with the link sees the live page, and the URL captures its exact state."],
+    ["Who is the critter?", "That is your Sycritter! It lives on the composer, watches your cursor, and reacts when you reach it. Open the gear in its menu to restyle it."],
+  ];
+  const chatLog = document.getElementById("chatLog");
+  const chatInput = document.getElementById("chatInput");
+  let chatSeeded = false;
+  function addMsg(who, text) {
+    const m = document.createElement("div");
+    m.className = "chatpop__msg chatpop__msg--" + who;
+    m.textContent = text;
+    chatLog.appendChild(m);
+    chatLog.scrollTop = chatLog.scrollHeight;
+  }
+  function answer(q) {
+    addMsg("me", q);
+    const hit = FAQ.find(([question]) => question.toLowerCase() === q.toLowerCase());
+    setTimeout(() => addMsg("bot", hit ? hit[1] : "Good question! Open the Forge docs from the top-right menu, or a teammate can jump into the shared session to help."), 260);
+  }
+  function seedChat() {
+    addMsg("bot", "Hi! I'm the Forge helper. Ask me anything about building and sharing interactive pages with Forge by Sycamore.");
+    const chips = document.getElementById("chatChips");
+    for (const [q] of FAQ) {
+      const c = document.createElement("button");
+      c.className = "chatpop__chip"; c.textContent = q;
+      c.addEventListener("click", () => answer(q));
+      chips.appendChild(c);
+    }
+  }
+  function openChat() {
+    chatOpen = true; toolsShown = false; critTools.classList.remove("show");
+    if (!chatSeeded) { seedChat(); chatSeeded = true; }
+    chatpop.classList.add("open"); dismissHint(); wake();
+  }
+  function closeChat() { chatOpen = false; chatpop.classList.remove("open"); wake(); }
+  document.getElementById("chatX").addEventListener("click", closeChat);
+  function chatSubmit() { const v = chatInput.value.trim(); if (v) { chatInput.value = ""; answer(v); } }
+  document.getElementById("chatSend").addEventListener("click", chatSubmit);
+  chatInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); chatSubmit(); } });
+
+  const seedInput = document.getElementById("seedInput");
+  document.getElementById("dice").addEventListener("click", () => applySpec(generate(randSeed())));
+  seedInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); if (seedInput.value.trim()) applySpec(generate(seedInput.value.trim())); } });
+  pop.addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-step]");
+    if (!btn) return;
+    const dir = +btn.dataset.dir;
+    if (btn.dataset.step === "top") cycleList(TOPS, "top", dir);
+    else if (btn.dataset.step === "bottom") cycleList(BOTTOMS, "bottom", dir);
+    else if (btn.dataset.step === "color") cycleColor(dir);
+  });
+  function cycleList(list, key, dir) {
+    const i = list.findIndex((m) => m.name === spec[key]);
+    const ni = ((i + dir) % list.length + list.length) % list.length;
+    applySpec({ ...spec, [key]: list[ni].name });
+  }
+  function cycleColor(dir) {
+    const start = PALETTE.findIndex((p) => p.name === spec.colors[0].name);
+    const n = spec.colors.length;
+    const ns = ((start + dir) % PALETTE.length + PALETTE.length) % PALETTE.length;
+    const colors = [];
+    for (let j = 0; j < n; j++) colors.push(PALETTE[(ns + j) % PALETTE.length]);
+    applySpec({ ...spec, colors });
+  }
+  function syncPopup() {
+    seedInput.value = spec.seed;
+    document.getElementById("valTop").textContent = spec.top;
+    document.getElementById("valBottom").textContent = spec.bottom;
+    const sw = document.getElementById("valColor");
+    sw.innerHTML = "";
+    for (const c of spec.colors) { const i = document.createElement("i"); i.style.background = c.hex; sw.appendChild(i); }
+  }
+
+  function dismissHint() { hintShown = true; hint.classList.remove("show"); }
+
+  /* ---- boot ------------------------------------------------------------ */
+  const perf = document.getElementById("perf");
+  syncPopup();
+  if (reduced.matches) {
+    drawStatic();
+    perf.textContent = "reduced-motion: static critter (no animation loop)";
+  } else {
+    wake();
+    // one-time discoverability nudge: point at the resting critter
+    setTimeout(() => {
+      if (hintShown || popupOpen || chatOpen) return;
+      const box = critterScreenBox();
+      hint.style.left = (box.x + box.w / 2) + "px";
+      hint.style.top = (box.y - 6) + "px";
+      hint.classList.add("show");
+      setTimeout(dismissHint, 4200);
+    }, 1000);
+  }
+})();
+</script>
+</body>
+</html>
