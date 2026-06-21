@@ -114,14 +114,6 @@
     will-change: transform;
     z-index: 5;
   }
-  .hint {
-    position: fixed; z-index: 6; transform: translate(-50%, -100%);
-    background: #2b2b2e; color: #fff; font-size: 12px; padding: 5px 9px; border-radius: 8px;
-    white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity .35s ease;
-  }
-  .hint::after { content: ""; position: absolute; left: 50%; top: 100%; transform: translateX(-50%);
-    border: 5px solid transparent; border-top-color: #2b2b2e; }
-  .hint.show { opacity: .92; }
 
   /* ---- proximity toolbar (chat + settings, floats above the critter) --- */
   .crit-tools {
@@ -189,6 +181,15 @@
   .stepper .val { min-width: 64px; text-align: center; font-weight: 600; color: #333; font-variant: tabular-nums; }
   .swatches { display: flex; gap: 3px; }
   .swatches i { width: 13px; height: 13px; border-radius: 3px; display: block; box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
+  /* feedback block in the settings popup */
+  .pop__feedback { border-top: 1px solid #f1f1f1; margin-top: 8px; padding-top: 10px; }
+  .pop__fbrow { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+  .fbbtn { width: 28px; height: 28px; border: 1px solid #e2e2e2; background: #fafafa; cursor: pointer; display: grid; place-items: center; font-size: 15px; color: #555; }
+  .fbbtn:hover { background: var(--send); color: #fff; border-color: var(--send); }
+  .pop__fbrow input { flex: 1; min-width: 0; border: 1px solid #e2e2e2; padding: 6px 8px; font-family: var(--font); font-size: 12px; outline: 0; }
+  .pop__fbrow input:focus { border-color: var(--send); }
+  .fbsend { width: 30px; height: 28px; border: 0; background: var(--send); color: #fff; cursor: pointer; display: grid; place-items: center; font-size: 14px; }
+  .pop__fbthanks { color: var(--send); font-size: 12px; font-weight: 600; margin-top: 8px; min-height: 14px; }
 
   /* ---- tiny live cost readout (answers "is this efficient?") ----------- */
   .perf {
@@ -197,4 +198,3 @@
     background: rgba(255,255,255,.7); border: 1px solid #eee; border-radius: 7px; padding: 4px 8px;
     pointer-events: none; backdrop-filter: blur(4px);
   }
-  @media (prefers-reduced-motion: reduce) { .hint { display: none; } }

@@ -41,10 +41,10 @@
       <div class="row-left"><div class="bubble bubble--bot"><b>Follows</b> — when your cursor comes within ~100px it walks over, speeding up as it gets closer.</div></div>
       <div class="row-left"><div class="bubble bubble--bot"><b>Leaps</b> — from a short distance it jumps toward your cursor along a natural gravity arc to close the gap.</div></div>
       <div class="row-left"><div class="bubble bubble--bot"><b>Catches you</b> — when it reaches your cursor it celebrates with a random hop, wiggle, dance or nod.</div></div>
-      <div class="row-left"><div class="bubble bubble--bot"><b>Thinks</b> — peers down and colour-pulses while you type in the composer.</div></div>
+      <div class="row-left"><div class="bubble bubble--bot"><b>Shimmers</b> — a light sweep washes over it while you type in the composer.</div></div>
       <div class="row-left"><div class="bubble bubble--bot"><b>Celebrates</b> — a happy hop when you press Enter.</div></div>
       <div class="row-left"><div class="bubble bubble--bot"><b>Rests &amp; sleeps</b> — sits at home (top-right), blinks every ~10s, and dozes off if you leave it alone for a while.</div></div>
-      <div class="row-left"><div class="bubble bubble--bot"><b>Eyes</b> — its two pupils are always a 2px bar pointing toward your cursor (left, right, up or down).</div></div>
+      <div class="row-left"><div class="bubble bubble--bot"><b>Eyes</b> — its two pupils point toward your cursor: a 2px bar for left/right/up/down, or a 1px corner for diagonals.</div></div>
       <div class="row-left"><div class="bubble bubble--bot"><b>Performance</b> — an 8×8 sprite stepped at 12fps. The loop parks itself when nothing is happening, so cost is ~0 while idle or asleep, and well under a millisecond per frame when active. Click it (the gear) to restyle.</div></div>
       <div class="row-left">
         <div class="triggers" id="triggers">
@@ -56,7 +56,7 @@
             <button data-anim="wiggle">Wiggle</button>
             <button data-anim="dance">Dance</button>
             <button data-anim="nod">Nod</button>
-            <button data-anim="think">Think</button>
+            <button data-anim="shimmer">Shimmer</button>
             <button data-anim="celebrate">Celebrate</button>
             <button data-anim="blink">Blink</button>
             <button data-anim="sleep">Sleep</button>
@@ -91,14 +91,22 @@
     <button class="crit-tools__btn" id="toolChat" title="Forge help"><i class="ph ph-chat-circle"></i></button>
     <button class="crit-tools__btn" id="toolSettings" title="Critter settings"><i class="ph ph-gear-six"></i></button>
   </div>
-  <div class="hint" id="hint">hover me</div>
-
   <div class="pop" id="pop">
     <div class="pop__head"><span class="pop__title">Customise critter</span><button class="pop__x" id="popX" title="Close">&times;</button></div>
     <div class="pop__seed"><input id="seedInput" spellcheck="false" /><button class="dice" id="dice" title="Random critter">&#127922;</button></div>
     <div class="pop__row"><span class="pop__label">Top</span><span class="stepper"><button data-step="top" data-dir="-1">&lsaquo;</button><span class="val" id="valTop">dome</span><button data-step="top" data-dir="1">&rsaquo;</button></span></div>
     <div class="pop__row"><span class="pop__label">Bottom</span><span class="stepper"><button data-step="bottom" data-dir="-1">&lsaquo;</button><span class="val" id="valBottom">flat</span><button data-step="bottom" data-dir="1">&rsaquo;</button></span></div>
     <div class="pop__row"><span class="pop__label">Colour</span><span class="stepper"><button data-step="color" data-dir="-1">&lsaquo;</button><span class="val swatches" id="valColor"></span><button data-step="color" data-dir="1">&rsaquo;</button></span></div>
+    <div class="pop__feedback">
+      <span class="pop__label">Feedback</span>
+      <div class="pop__fbrow">
+        <button class="fbbtn" data-fb="up" title="Love it"><i class="ph ph-thumbs-up"></i></button>
+        <button class="fbbtn" data-fb="down" title="Needs work"><i class="ph ph-thumbs-down"></i></button>
+        <input id="fbInput" placeholder="Tell us more&hellip;" spellcheck="false" />
+        <button class="fbsend" id="fbSend" title="Send"><i class="ph ph-paper-plane-right"></i></button>
+      </div>
+      <div class="pop__fbthanks" id="fbThanks"></div>
+    </div>
   </div>
 
   <div class="chatpop" id="chatpop">
