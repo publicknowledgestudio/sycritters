@@ -291,7 +291,7 @@
     const fromX = x, dir = Math.sign(targetX - fromX) || facing || 1;
     const mouseX = clamp(targetX, b.min, b.max);
     const landX = clamp(mouseX + dir * 20, b.min, b.max);   // overshoot the mouse a little
-    dash = { t0: t, fromX, mouseX, landX, dir, dur: clamp(Math.abs(landX - fromX) * 4.5, 420, 900) };
+    dash = { t0: t, fromX, mouseX, landX, dir, dur: clamp(Math.abs(landX - fromX) * 5, 460, 1000) };
     facing = dir;
   }
   function spawnDashDust(t, dir) {
