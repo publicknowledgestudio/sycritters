@@ -158,7 +158,7 @@
   let stepAcc = 0;               // ms accumulator for whole-pixel stepping
   let curLift = 0;               // current jump height (for hit-testing + distance)
   let jump = null;               // { t0, dur, reach } — a leap toward the mouse
-  let lastJumpEnd = -1e9;
+  let lastJumpEnd = -1e9, lastDashEnd = -1e9;
   let react = null;              // { kind, t0, dur } — a "caught you!" celebration
   let lastReactEnd = -1e9;
   let forced = null;             // { state, until } — a button-triggered demo animation
@@ -219,15 +219,17 @@
     if (react) { if (t - react.t0 >= react.dur) { react = null; lastReactEnd = t; } else return "react"; }
     if (document.activeElement === ta && (t - lastType < 2500 || t < thinkUntil)) return "shimmer";
     if (jump)  { if (t - jump.t0  >= jump.dur)  { jump  = null; lastJumpEnd  = t; } else return "jump"; }
+    if (dash)  { if (t - dash.t0  >= dash.dur)  { dash  = null; lastDashEnd  = t; } else return "dash"; }
     const moused = mouseIn && (t - mouseMoved) < 2000;
     const busy = toolsShown || chatOpen || popupOpen;       // a panel is up -> stay calm
     if (moused && !busy && geo.d < CATCH_R && geo.d > TOOL_R && (t - lastReactEnd) > REACT_COOLDOWN) {
       react = startReact(t, geo);                           // caught up -> celebrate
       return "react";
     }
-    if (moused && !busy && geo.d >= JUMP_LO && geo.d <= JUMP_HI && (t - lastJumpEnd) > JUMP_COOLDOWN) {
-      startJump(t, mx - geo.r.left - SPRITE_W / 2, Math.max(0, geo.r.top - my));  // land under the mouse; arc scales with cursor height
-      return "jump";
+    if (moused && !busy && geo.d >= JUMP_LO && geo.d <= JUMP_HI && (t - lastJumpEnd) > JUMP_COOLDOWN && (t - lastDashEnd) > JUMP_COOLDOWN) {
+      const target = mx - geo.r.left - SPRITE_W / 2;
+      if (my < geo.cy) { startJump(t, target, Math.max(0, geo.r.top - my)); return "jump"; }  // mouse higher -> leap up to it
+      startDash(t, target); return "dash";                                                     // else -> dash to catch up
     }
     if (moused && geo.d < ENGAGE_R) return "follow";        // mouse in the zone -> follow it
     if (Math.abs(x - homeX()) >= CELL) return "return";     // mouse gone -> head home
