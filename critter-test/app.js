@@ -125,7 +125,7 @@
     const dx = t.dx || 0, dy = t.dy || 0;
     const sq = t.squashY == null ? 1 : t.squashY;
     const sqx = t.squashX == null ? 1 : t.squashX;   // horizontal squash (kept for general use)
-    const w = Math.max(1, Math.ceil(CELL * sqx)), clipTop = t.clipTop || 0;
+    const w = Math.max(1, Math.ceil(CELL * sqx)), clipTop = t.clipTop || 0, shear = t.shear || 0;
     rot = (rot || 0) & 3;                             // 90deg rotation steps (tumble roll)
     ctx.clearRect(0, 0, SPRITE_W, SPRITE_H);
     for (let y = 0; y < 8; y++)
@@ -138,7 +138,7 @@
         const fill = cellFill(grid[sy][sx], p, x, y);
         if (!fill) continue;
         ctx.fillStyle = fill;
-        const px = Math.round((3.5 + (x - 3.5) * sqx + PAD_SIDE + dx) * CELL);  // scale about the centre
+        const px = Math.round((3.5 + (x - 3.5) * sqx + PAD_SIDE + dx) * CELL + shear * (7 - y) / 7);  // scale about the centre + lean (shear)
         const py = Math.round((y * sq + 8 * (1 - sq) + PAD_TOP + dy) * CELL);
         if (clipTop && py < clipTop) continue;       // hide rows still "inside" the portal
         ctx.fillRect(px, py, w, Math.ceil(CELL * sq));
@@ -359,6 +359,7 @@
     } else if (state === "dash") {
       const k = clamp((t - dash.t0) / dash.dur, 0, 1);
       legShift = [-1, 0, 1, 0][legPhase];          // running legs — very little Y
+      T.shear = dash.dir * 4 * (1 - k);            // top leans into the motion, straightening as it stops (inertia)
       if (k > 0.55) T.squashY = 0.78;              // skid: low squash as it slides to a stop
     } else if (state === "teleport") {
       const e = t - teleport.t0;
