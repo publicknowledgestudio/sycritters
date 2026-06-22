@@ -282,6 +282,24 @@
     ctx.globalAlpha = 1;
   }
 
+  // dash: a sudden, flat ground run toward the mouse that overshoots and skids to a stop
+  let dash = null;
+  function startDash(t, targetX) {
+    const b = bounds();
+    const fromX = x, dir = Math.sign(targetX - fromX) || facing || 1;
+    const mouseX = clamp(targetX, b.min, b.max);
+    const landX = clamp(mouseX + dir * 20, b.min, b.max);   // overshoot the mouse a little
+    dash = { t0: t, fromX, mouseX, landX, dir, dur: clamp(Math.abs(landX - fromX) * 4.5, 420, 900) };
+    facing = dir;
+  }
+  function spawnDashDust(t, dir) {
+    dust.push({
+      x: SPRITE_W / 2 - dir * (CELL + Math.random() * CELL * 3),   // behind the feet
+      y: SPRITE_H - CELL - Math.random() * CELL * 3,               // scattered over the bottom ~half rows
+      vx: -dir * (4 + Math.random() * 12), vy: -(1 + Math.random() * 5), t0: t,  // stays low to the ground
+    });
+  }
+
   // teleport: sink into a rainbow portal line-by-line, pause, then drop from one nearby
   let teleport = null;
   function startTeleport(t) {
@@ -338,6 +356,10 @@
           T.squashY = le < 90 ? 0.66 : le < 200 ? 0.88 : 1; // skid: squash low, then recover
         }
       }
+    } else if (state === "dash") {
+      const k = clamp((t - dash.t0) / dash.dur, 0, 1);
+      legShift = [-1, 0, 1, 0][legPhase];          // running legs — very little Y
+      if (k > 0.55) T.squashY = 0.78;              // skid: low squash as it slides to a stop
     } else if (state === "teleport") {
       const e = t - teleport.t0;
       if (e < teleport.sinkDur) T.dy = (e / teleport.sinkDur) * 8;                  // sink line-by-line (clips at the ground)
@@ -373,7 +395,7 @@
     } else { // rest: dormant at home, with an occasional glance/bob
       if (t < restAnimUntil && restAnim === "bob") T.dy = [0, -1, -1, 0][Math.floor((t - restAnimStart) / 90) % 4];
     }
-    return { legShift, T, p, lift, flipOverride, rot, animated: state === "shimmer" || state === "celebrate" || state === "react" || state === "jump" || state === "teleport" };
+    return { legShift, T, p, lift, flipOverride, rot, animated: state === "shimmer" || state === "celebrate" || state === "react" || state === "jump" || state === "teleport" || state === "dash" };
   }
 
   /* ---- the loop -------------------------------------------------------- */
@@ -402,6 +424,12 @@
         x = jump.landX + jump.dir * jump.overshoot * (1 - (1 - k) * (1 - k));   // tumble keeps rolling forward, past the mouse
       }
       facing = jump.dir;
+    } else if (state === "dash") {
+      const e = t - dash.t0, k = clamp(e / dash.dur, 0, 1);
+      x = dash.fromX + (dash.landX - dash.fromX) * (1 - (1 - k) * (1 - k));   // sudden run -> ease-out skid to a stop
+      legPhase = Math.floor(e / 40) % 4;
+      if (k > 0.5 && k < 0.95) spawnDashDust(t, dash.dir);                     // kick up dust while skidding
+      facing = dash.dir;
     } else {
       // target x
       if (state === "follow") targetX = clamp(mx - geo.r.left - SPRITE_W / 2, b.min, b.max);
@@ -668,7 +696,7 @@
     const b = bounds();
     if (kind === "walk") { demoTarget = (x > (b.min + b.max) / 2) ? b.min : b.max; forced = { state: "demowalk", until: t + 2600 }; }
     else if (kind === "jump") { startJump(t, x + (x > (b.min + b.max) / 2 ? -90 : 90), 40); forced = { state: "jump", until: t + jump.dur }; }
-    else if (kind === "skid") { startJump(t, x + (x > (b.min + b.max) / 2 ? -44 : 44), 0); forced = { state: "jump", until: t + jump.dur }; }
+    else if (kind === "dash") { startDash(t, x + (x > (b.min + b.max) / 2 ? -90 : 90)); forced = { state: "dash", until: t + dash.dur }; }
     else if (REACT_DUR[kind]) { react = { kind, t0: t, dur: REACT_DUR[kind] }; }
     else if (kind === "shimmer") { forced = { state: "shimmer", until: t + 2700 }; }  // ~2 slow sweeps
     else if (kind === "teleport") { startTeleport(t); forced = { state: "teleport", until: t + teleport.dur }; }
