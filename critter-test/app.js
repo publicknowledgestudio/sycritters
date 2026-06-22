@@ -228,8 +228,8 @@
     }
     if (moused && !busy && geo.d >= JUMP_LO && geo.d <= JUMP_HI && (t - lastJumpEnd) > JUMP_COOLDOWN && (t - lastDashEnd) > JUMP_COOLDOWN) {
       const target = mx - geo.r.left - SPRITE_W / 2;
-      if (my < geo.cy) { startJump(t, target, Math.max(0, geo.r.top - my)); return "jump"; }  // mouse higher -> leap up to it
-      startDash(t, target); return "dash";                                                     // else -> dash to catch up
+      if (my < geo.cy - BODY / 2) { startJump(t, target, Math.max(0, geo.r.top - my)); return "jump"; }  // mouse above the critter's head -> leap up
+      startDash(t, target); return "dash";                                                              // else -> dash to catch up
     }
     if (moused && geo.d < ENGAGE_R) return "follow";        // mouse in the zone -> follow it
     if (Math.abs(x - homeX()) >= CELL) return "return";     // mouse gone -> head home
