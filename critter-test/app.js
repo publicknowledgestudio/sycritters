@@ -216,12 +216,13 @@
   function decide(t, geo) {
     if (forced) { if (t < forced.until) return forced.state; forced = null; demoTarget = null; }
     if (t < celebrateUntil) return "celebrate";
+    if (dazed) { if (t - dazed.t0 >= dazed.dur) dazed = null; else return "dazed"; }
     if (react) { if (t - react.t0 >= react.dur) { react = null; lastReactEnd = t; } else return "react"; }
     if (document.activeElement === ta && (t - lastType < 2500 || t < thinkUntil)) return "shimmer";
     if (jump)  { if (t - jump.t0  >= jump.dur)  { jump  = null; lastJumpEnd  = t; } else return "jump"; }
     if (dash)  { if (t - dash.t0  >= dash.dur)  { dash  = null; lastDashEnd  = t; } else return "dash"; }
     const moused = mouseIn && (t - mouseMoved) < 2000;
-    const busy = toolsShown || chatOpen || popupOpen;       // a panel is up -> stay calm
+    const busy = toolsShown || chatOpen || popupOpen || swirling;  // panel up / being circled -> stay calm
     if (moused && !busy && geo.d < CATCH_R && geo.d > TOOL_R && (t - lastReactEnd) > REACT_COOLDOWN) {
       react = startReact(t, geo);                           // caught up -> celebrate
       return "react";
@@ -319,6 +320,34 @@
     ctx.globalAlpha = 1;
   }
 
+  // dazed: triggered by circling the cursor around the critter 3 times. While a
+  // swirl builds the critter holds still and watches; 3 turns -> woozy.
+  let dazed = null, swirlAcc = 0, swirlAngle = null, swirling = false;
+  function startDazed(t, dir) { dazed = { t0: t, dir: dir || 1, dur: 2200 }; swirlAcc = 0; swirlAngle = null; swirling = false; }
+  function updateSwirl(t, geo) {
+    const inBand = mouseIn && !dazed && !forced && !popupOpen && !chatOpen && geo.d > 24 && geo.d < 130;
+    if (!inBand) { swirlAcc = 0; swirlAngle = null; swirling = false; return; }
+    const a = Math.atan2(my - geo.cy, mx - geo.cx);
+    if (swirlAngle != null) {
+      let d = a - swirlAngle;
+      while (d > Math.PI) d -= 2 * Math.PI;          // unwrap the seam
+      while (d < -Math.PI) d += 2 * Math.PI;
+      if (swirlAcc !== 0 && Math.abs(d) > 0.3 && Math.sign(d) !== Math.sign(swirlAcc)) swirlAcc = 0;  // reversed -> reset
+      else swirlAcc += d;
+      swirling = Math.abs(swirlAcc) > Math.PI * 1.2;  // clearly circling -> hold still and watch
+      if (Math.abs(swirlAcc) >= 6 * Math.PI) startDazed(t, Math.sign(swirlAcc));  // 3 turns -> dazed
+    }
+    swirlAngle = a;
+  }
+  function drawDazedDots(t, sign) {
+    const ox = SPRITE_W / 2, oy = PAD_TOP * CELL - CELL * 3;   // ring centre, above the head
+    ctx.fillStyle = "#ffce3a";
+    for (let i = 0; i < 3; i++) {
+      const a = sign * t / 160 + i * 2.094;                    // 2pi/3 apart
+      ctx.fillRect(Math.round(ox + Math.cos(a) * CELL * 3 - CELL / 2), Math.round(oy + Math.sin(a) * CELL * 1.4 - CELL / 2), CELL, CELL);
+    }
+  }
+
   function geometry() {
     const r = composer.getBoundingClientRect();   // one read per tick
     const cx = r.left + x + SPRITE_W / 2;
@@ -363,6 +392,15 @@
       legShift = [-1, 0, 1, 0][legPhase];          // running legs — very little Y
       T.shear = dash.dir * 4 * (1 - k);            // top leans into the motion, straightening as it stops (inertia)
       if (k > 0.55) T.squashY = 0.78;              // skid: low squash as it slides to a stop
+    } else if (state === "dazed") {
+      const e = t - dazed.t0, ph = e / dazed.dur;
+      if (ph < 0.82) {
+        T.dx = Math.round(Math.sin(e / 130) * 2);          // off-balance sway
+        T.shear = dazed.dir * Math.sin(e / 110) * 4;       // top rocks back and forth
+        T.squashY = 0.94 + 0.03 * Math.sin(e / 85);        // slight sink + loose squash
+      } else {
+        T.dx = [1, -1, 1, -1, 0][Math.floor((e - dazed.dur * 0.82) / 50) % 5];   // shake it off
+      }
     } else if (state === "teleport") {
       const e = t - teleport.t0;
       if (e < teleport.sinkDur) T.dy = (e / teleport.sinkDur) * 8;                  // sink line-by-line (clips at the ground)
@@ -398,7 +436,7 @@
     } else { // rest: dormant at home, with an occasional glance/bob
       if (t < restAnimUntil && restAnim === "bob") T.dy = [0, -1, -1, 0][Math.floor((t - restAnimStart) / 90) % 4];
     }
-    return { legShift, T, p, lift, flipOverride, rot, animated: state === "shimmer" || state === "celebrate" || state === "react" || state === "jump" || state === "teleport" || state === "dash" };
+    return { legShift, T, p, lift, flipOverride, rot, animated: state === "shimmer" || state === "celebrate" || state === "react" || state === "jump" || state === "teleport" || state === "dash" || state === "dazed" };
   }
 
   /* ---- the loop -------------------------------------------------------- */
@@ -410,6 +448,7 @@
     const dt = clamp(t - lastT, 0, 60) / 1000;
     lastT = t;
     const geo = geometry();
+    updateSwirl(t, geo);                 // watch for the cursor circling the critter
     const state = decide(t, geo);
     const b = bounds();
 
@@ -439,7 +478,7 @@
       else if (state === "return") targetX = homeX();
       else if (state === "demowalk") targetX = demoTarget;
       else targetX = x;
-      if (popupOpen || chatOpen || toolsShown) targetX = x;   // hold still while interacting
+      if (popupOpen || chatOpen || toolsShown || swirling) targetX = x;   // hold still while interacting / being circled
 
       // Following SPEEDS UP as it nears the mouse; others steady. WHOLE-pixel steps -> no shimmer.
       let speed = 0;
@@ -470,11 +509,12 @@
 
     // Eyes: two 2px pupils always point at the pointer (left/right/top/bottom);
     // blink is layered on top on a global timer, wherever the eyes happen to be.
-    const dir = pupilDir(geo, flip);
+    let dir = pupilDir(geo, flip);
     if (state !== "rest" && state !== "sleep" && t > nextBlink) { blinkStart = t; nextBlink = t + 3200 + Math.random() * 3200; }
     const bp = t - blinkStart;
     let blink = (bp >= 0 && bp < 300) ? (bp < 70 ? 1 : bp < 230 ? 2 : 1) : 0;
     if (state === "sleep") blink = 2;                       // eyes shut while asleep
+    if (state === "dazed") { blink = 0; const s = (flip ? -1 : 1) * dazed.dir; dir = (s > 0 ? ["UL", "UR", "DR", "DL"] : ["UR", "UL", "DL", "DR"])[Math.floor((t - dazed.t0) / 90) % 4]; }  // pupils spin
 
     const a = now();
     const grid = gridFor(dir, blink, ps.legShift);
@@ -489,6 +529,7 @@
         // portal on the ground while sinking in; portal up top while dropping out
         drawRainbow(t, te < teleport.sinkDur + teleport.pauseDur ? SPRITE_H - CELL : SPRITE_H - CELL - 9 * CELL);
       }
+      if (state === "dazed") drawDazedDots(t, dazed.dir);   // gold dots orbiting overhead
       lastDrawKey = drawKey;
       perfSum += now() - a; perfN++;
     }
@@ -695,7 +736,7 @@
   function forceAnim(kind) {
     const t = now();
     lastInteraction = t;
-    forced = null; demoTarget = null; jump = null; react = null;
+    forced = null; demoTarget = null; jump = null; react = null; dash = null; dazed = null;
     const b = bounds();
     if (kind === "walk") { demoTarget = (x > (b.min + b.max) / 2) ? b.min : b.max; forced = { state: "demowalk", until: t + 2600 }; }
     else if (kind === "jump") { startJump(t, x + (x > (b.min + b.max) / 2 ? -90 : 90), 40); forced = { state: "jump", until: t + jump.dur }; }
@@ -703,6 +744,7 @@
     else if (REACT_DUR[kind]) { react = { kind, t0: t, dur: REACT_DUR[kind] }; }
     else if (kind === "shimmer") { forced = { state: "shimmer", until: t + 2700 }; }  // ~2 slow sweeps
     else if (kind === "teleport") { startTeleport(t); forced = { state: "teleport", until: t + teleport.dur }; }
+    else if (kind === "dazed") { startDazed(t, 1); }
     else if (kind === "celebrate") { celebrateUntil = t + 1300; }
     else if (kind === "sleep") { lastInteraction = t - SLEEP_AFTER - 4000; forced = { state: "sleep", until: t + 4000 }; restAnim = "breath"; restAnimStart = t; restAnimUntil = t + 4000; }
     else if (kind === "blink") { blinkStart = t; }
