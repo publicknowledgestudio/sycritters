@@ -3,11 +3,13 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
+import { SavePass } from "three/addons/postprocessing/SavePass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { SVGLoader } from "three/addons/loaders/SVGLoader.js";
 import { motionPose3D } from "./critter-motion.mjs";
+import { SpeechAttention } from "./critter-attention.mjs";
 
 const SIZE = 8;
 const BODY_LAYERS = 4;
@@ -253,16 +255,92 @@ function pupilPosition(eye, x, y) {
 
 function makeAccessory(option) {
   const group = new THREE.Group();
+  if (["top-hat", "round-glasses", "headphones", "crown", "scarf"].includes(option.value)) {
+    const black = new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 0.8 });
+    const white = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 });
+    const add = (geometry, material, x, y, z) => {
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.set(x, y, z);
+      group.add(mesh);
+      return mesh;
+    };
+    if (option.value === "crown") {
+      const profile = [
+        new THREE.Vector2(1.3, -0.45), new THREE.Vector2(1.6, -0.45),
+        new THREE.Vector2(1.6, 0.25), new THREE.Vector2(1.3, 0.25),
+        new THREE.Vector2(1.3, -0.45),
+      ];
+      add(new THREE.LatheGeometry(profile, 32), black, 0, 0, -2.035);
+      for (let i = 0; i < 6; i++) {
+        const angle = i * Math.PI / 3;
+        add(new THREE.ConeGeometry(0.38, 0.85, 4), white,
+          1.45 * Math.sin(angle), 0.6, -2.035 + 1.45 * Math.cos(angle));
+      }
+    } else if (option.value === "scarf") {
+      const corners = [
+        [-3.1, 0, 0.28], [3.1, 0, 0.28], [3.75, 0, -0.35],
+        [3.75, 0, -3.75], [3.1, 0, -4.35], [-3.1, 0, -4.35],
+        [-3.75, 0, -3.75], [-3.75, 0, -0.35],
+      ].map(point => new THREE.Vector3(...point));
+      const wrap = new THREE.CatmullRomCurve3(corners, true, "centripetal");
+      add(new THREE.TubeGeometry(wrap, 64, 0.33, 8, true), black, 0, 0.5, 0);
+      add(new THREE.BoxGeometry(0.65, 1.85, 0.35), black, 2.35, -0.45, 0.44);
+      add(new THREE.BoxGeometry(0.67, 0.22, 0.37), white, 2.35, -1.1, 0.44);
+    } else if (option.value === "headphones") {
+      // Seat the band over the body's depth, rather than on its front face.
+      const points = Array.from({ length: 33 }, (_, i) => {
+        const angle = Math.PI * i / 32;
+        return new THREE.Vector3(4.25 * Math.cos(angle), -0.55 + 2.45 * Math.sin(angle), -2.035);
+      });
+      const band = new THREE.CatmullRomCurve3(points);
+      add(new THREE.TubeGeometry(band, 48, 0.24, 8, false), black, 0, 0, 0);
+      for (const side of [-1, 1]) {
+        const cup = add(new THREE.CylinderGeometry(0.98, 0.98, 0.65, 24), black,
+          side * 4.25, -0.65, -2.035);
+        cup.rotation.z = Math.PI / 2;
+        const inset = add(new THREE.CylinderGeometry(0.67, 0.67, 0.07, 24), white,
+          side * 4.6, -0.65, -2.035);
+        inset.rotation.z = Math.PI / 2;
+      }
+    } else if (option.value === "top-hat") {
+      add(new THREE.CylinderGeometry(2.05, 2.05, 0.22, 32), black, 0, -0.35, -2.035);
+      add(new THREE.CylinderGeometry(1.35, 1.45, 1.85, 32), black, 0, 0.65, -2.035);
+      add(new THREE.CylinderGeometry(1.43, 1.45, 0.32, 32), white, 0, -0.05, -2.035);
+    } else {
+      for (const x of [-1.45, 1.45]) {
+        const rim = add(new THREE.TorusGeometry(1.58, 0.12, 8, 40), black, x, 0, 0.24);
+        rim.userData.glassesPart = "rim";
+      }
+      const bridge = add(new THREE.BoxGeometry(1, 0.18, 0.18), black, 0, 0.25, 0.24);
+      bridge.userData.glassesPart = "bridge";
+    }
+    return group;
+  }
   const scale = option.width / 24;
   const { paths } = new SVGLoader().parse(option.icon);
   paths.forEach((path, index) => {
     const shapes = SVGLoader.createShapes(path);
-    const geometry = new THREE.ShapeGeometry(shapes, 12);
+    const depth = option.anchor === "head" ? 0.55 : 0.3;
+    const geometry = new THREE.ExtrudeGeometry(shapes, {
+      depth: depth / scale,
+      steps: 1,
+      bevelEnabled: true,
+      bevelThickness: 0.035 / scale,
+      bevelSize: 0.035 / scale,
+      bevelSegments: 2,
+      curveSegments: 12,
+    });
     geometry.translate(-12, -12, 0);
-    geometry.scale(scale, -scale, 1);
-    // Flipping SVG's Y axis reverses the triangle winding.
-    const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: path.color, side: THREE.BackSide }));
-    mesh.position.z = 0.005 * index;
+    // Turn SVG coordinates upright without reversing the surface winding.
+    geometry.scale(scale, -scale, -scale);
+    geometry.translate(0, 0, depth);
+    const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({
+      color: path.color,
+      roughness: 0.85,
+      metalness: 0,
+    }));
+    // Raised inlays overlap the base and remain clear during turns and squashes.
+    mesh.position.z = 0.085 * index;
     group.add(mesh);
   });
   return group;
@@ -317,8 +395,8 @@ export function createStage(host, avatar, shapePreviews, rasterize, restPaint) {
   const orbit = new OrbitControls(camera, canvas);
   orbit.target.set(0, 3.8, 0);
   orbit.enablePan = false;
-  orbit.minPolarAngle = 0.56;
-  orbit.maxPolarAngle = Math.PI / 2 - 0.06;
+  orbit.minPolarAngle = 0.01;
+  orbit.maxPolarAngle = Math.PI - 0.01;
   orbit.minZoom = 0.75;
   orbit.maxZoom = 1.6;
   orbit.update();
@@ -356,8 +434,30 @@ export function createStage(host, avatar, shapePreviews, rasterize, restPaint) {
   const erode = silhouettePass("min", "vec4(pixel.rgb, alpha)");
   const dilate = silhouettePass("max", "vec4(pixel.rgb * alpha, alpha)");
   const sticker = silhouettePass("max", "vec4(pixel.rgb + vec3(alpha - pixel.a), alpha)");
+  // Retain the rendered silhouette before rounding: thin accessories outside
+  // the body must survive the erosion used to soften voxel corners.
+  const original = new SavePass(new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType }));
+  const preserveAccessory = new ShaderPass({
+    uniforms: {
+      tDiffuse: { value: null },
+      original: { value: original.renderTarget.texture },
+    },
+    vertexShader: `varying vec2 vUv;
+      void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: `uniform sampler2D tDiffuse;
+      uniform sampler2D original;
+      varying vec2 vUv;
+      void main() {
+        vec4 rounded = texture2D(tDiffuse, vUv);
+        vec4 source = texture2D(original, vUv);
+        gl_FragColor = source.a > rounded.a
+          ? vec4(source.rgb * source.a, source.a) : rounded;
+      }`,
+  });
+  composer.addPass(original);
   composer.addPass(erode);
   composer.addPass(dilate);
+  composer.addPass(preserveAccessory);
   composer.addPass(sticker);
   composer.addPass(new OutputPass());
 
@@ -388,6 +488,7 @@ export function createStage(host, avatar, shapePreviews, rasterize, restPaint) {
   let eyeShape = "round", motionName = "none", motionSince = null;
   let accessoryOption, accessoryMesh, previewScale = 1;
   let attention = 0, listeningSince = null, previousFrame = null;
+  const speechAttention = new SpeechAttention();
   let pointerTarget = null, pointerX = 0, pointerY = 0, pointerWeight = 0;
   let silhouette = "", colors = "", dirty = true;
   let startedAt = null, breathingSince = null;
@@ -496,21 +597,43 @@ export function createStage(host, avatar, shapePreviews, rasterize, restPaint) {
     const pinX = pinRow?.[5] && pinRow[6] ? 2.18 : 0.9;
     const chestY = Math.max(1.25, eyeY - 1.82);
     const head = accessoryOption.anchor === "head", top = accessoryOption.anchor === "top";
-    const y = head ? SIZE - 1.60 : top ? SIZE - Math.max(0, crownRow) + 0.53 : chestY;
-    accessoryMesh.position.set(accessoryOption.anchor === "pin" ? pinX : 0, y, BODY_FRONT + 0.035);
+    const y = accessoryOption.anchor === "eyes" ? eyeY : head ? SIZE - 1.60 : top ? SIZE - Math.max(0, crownRow) + 0.53 : chestY;
+    const floatOffset = accessoryOption.value === "top-hat" ? 0.65 : 0;
+    accessoryMesh.position.set(accessoryOption.anchor === "pin" ? pinX : 0, y + floatOffset, BODY_FRONT + 0.035);
+    if (accessoryOption.value === "round-glasses") {
+      const left = eyes[0].opening.position.x;
+      const right = eyes[1].opening.position.x;
+      const center = (left + right) / 2;
+      const radius = Math.min(1.58, (right - left) / 2 - 0.24);
+      accessoryMesh.position.x = center;
+      let rimIndex = 0;
+      for (const mesh of accessoryMesh.children) {
+        if (mesh.userData.glassesPart === "rim") {
+          mesh.position.x = [left, right][rimIndex++] - center;
+          mesh.scale.set(radius / 1.58, radius / 1.58, 1);
+        } else if (mesh.userData.glassesPart === "bridge") {
+          mesh.scale.x = right - left - 2 * radius;
+        }
+      }
+    }
   }
 
   function setAccessory(next) {
     if (next === accessoryOption) return;
     if (accessoryMesh) {
       accessoryMesh.removeFromParent();
+      const materials = new Set();
       for (const mesh of accessoryMesh.children) {
         mesh.geometry.dispose();
-        mesh.material.dispose();
+        materials.add(mesh.material);
       }
+      for (const material of materials) material.dispose();
       accessoryMesh = null;
     }
     accessoryOption = next;
+    // Restore thin geometry only when an accessory is present; bare critters
+    // retain their existing rounded silhouette.
+    preserveAccessory.enabled = Boolean(next?.art);
     if (next?.art) {
       accessoryMesh = makeAccessory(next);
       critter.add(accessoryMesh);
@@ -611,7 +734,7 @@ export function createStage(host, avatar, shapePreviews, rasterize, restPaint) {
     critter.visible = true;
   }
 
-  function draw(time, animateEyes, requestedMotion, allowMotion, listening = false, directedPose = null) {
+  function draw(time, animateEyes, requestedMotion, allowMotion, listening = false, directedPose = null, speechSignal = null) {
     if (!spec) return;
     const w = host.clientWidth, h = host.clientHeight;
     if (!w || !h) return;
@@ -654,7 +777,9 @@ export function createStage(host, avatar, shapePreviews, rasterize, restPaint) {
       refresh();
     }
     motionSince ??= time;
-    const pose = directedPose ?? motionPose3D(motionName, (time - motionSince) / 1000);
+    const speechPose = speechAttention.update(time, speechSignal);
+    const pose = directedPose ?? (allowMotion && !transition && requestedMotion === "none" ? speechPose : null)
+      ?? motionPose3D(motionName, (time - motionSince) / 1000);
     const following = !pose && !transition && pointerTarget !== null;
     const ease = allowMotion ? 1 - Math.exp(-delta / 105) : 1;
     const follow = (current, target) => {

@@ -27,12 +27,6 @@
     background: var(--bg);
     line-height: 1.4;
   }
-  /* very subtle pixel-noise texture (from the 5x5 sibling project) */
-  body::before {
-    content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
-    background-image: url("data:image/svg+xml,%3Csvg width='4' height='4' viewBox='0 0 4 4' xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='1' height='1' fill='%23000000' fill-opacity='0.02'/%3E%3C/svg%3E");
-  }
-
   #app { position: relative; z-index: 1; max-width: 1000px; margin: 0 auto; padding: 32px 28px 96px; }
 
   /* ---- masthead ---- */
@@ -76,8 +70,7 @@
     position: absolute; inset: 0; display: grid; place-content: center; margin: 0;
     padding: 20px; text-align: center; color: #dce5ee; background: #161f2c;
   }
-  .stage-3d__status[hidden], .stage-3d__toolbar[hidden],
-  .presets[hidden] { display: none; }
+  .stage-3d__status[hidden], .stage-3d__toolbar[hidden] { display: none; }
   #app[data-view="3d"] [data-pixel-only] { display: none; }
   [data-3d-only], .editor-menus, .wall-pages { display: none; }
   #app[data-view="3d"] [data-3d-only]:not([hidden]) { display: block; }
@@ -151,8 +144,6 @@
   }
   .avatar-preview canvas { display: block; width: 24px; height: 24px; }
   .avatar-preview[hidden] { display: none; }
-  .presets { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
-  .presets-label { margin: 0 5px 0 0; font-size: 11px; color: #5a5a5a; }
   @media (min-width: 821px) {
     .stage-3d { max-height: max(264px, calc((100svh - 240px) * 0.88)); }
   }
@@ -368,12 +359,6 @@
         <div class="view-switch" role="group" aria-label="Preview mode">
           <button class="btn" id="viewPixel" type="button" aria-pressed="true" aria-controls="pixelStage">Pixel</button>
           <button class="btn" id="view3D" type="button" aria-pressed="false" aria-controls="preview3D">3D</button>
-        </div>
-        <div class="presets seg" id="presets3D" role="group" aria-label="3D starter seeds" hidden>
-          <span class="presets-label">Try a seed</span>
-          <button type="button" data-seed="mint-26802" aria-pressed="false">Agent</button>
-          <button type="button" data-seed="dome-955" aria-pressed="false">Dome</button>
-          <button type="button" data-seed="opal" aria-pressed="false">Slant</button>
         </div>
       </div>
       <div id="preview3D">
@@ -1139,16 +1124,20 @@ globalThis.Sycritters = (function () {
   }));
   const accessories = [
     { value: "none", label: "None", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="7"/><path d="m7 17 10-10"/></svg>' },
+    { value: "round-glasses", label: "Round glasses", width: 5.3, anchor: "eyes", art:
+      '<path fill="#000000" fill-rule="evenodd" d="M1 12a5 5 0 1 1 10 0 5 5 0 0 1-10 0Zm1.5 0a3.5 3.5 0 1 0 7 0 3.5 3.5 0 0 0-7 0ZM13 12a5 5 0 1 1 10 0 5 5 0 0 1-10 0Zm1.5 0a3.5 3.5 0 1 0 7 0 3.5 3.5 0 0 0-7 0Z"/><path fill="#000000" d="M10 10h4v1.5h-4Z"/>' },
+    { value: "top-hat", label: "Top hat", width: 4.1, anchor: "top", art:
+      '<rect fill="#000000" x="6" y="3" width="12" height="15" rx="1"/><rect fill="#ffffff" x="6" y="13" width="12" height="3"/><ellipse fill="#000000" cx="12" cy="19" rx="11" ry="2"/>' },
     { value: "bow-tie", label: "Bow tie", width: 3.15, anchor: "chest", art:
-      '<path fill="#7c324e" d="M3 5q1-1 8.5 4h1q7.5-5 8.5-4 1 1 1 7t-1 7q-1 1-8.5-4h-1Q4 20 3 19t-1-7q0-6 1-7Z"/><rect fill="#e98eae" x="9" y="9" width="6" height="6" rx="1.8"/>' },
+      '<path fill="#000000" d="M3 5q1-1 8.5 4h1q7.5-5 8.5-4 1 1 1 7t-1 7q-1 1-8.5-4h-1Q4 20 3 19t-1-7q0-6 1-7Z"/><rect fill="#ffffff" x="9" y="9" width="6" height="6" rx="1.8"/>' },
     { value: "headphones", label: "Headphones", width: 9.7, anchor: "head", art:
-      '<path fill="#393451" d="M1.5 15a10.5 10.5 0 0 1 21 0h-2a8.5 8.5 0 0 0-17 0Z"/><rect fill="#393451" x=".55" y="12.4" width="3.8" height="7.7" rx="1.7"/><rect fill="#393451" x="19.65" y="12.4" width="3.8" height="7.7" rx="1.7"/><rect fill="#b29cf5" x="1.4" y="14" width="1.6" height="4.6" rx=".8"/><rect fill="#b29cf5" x="21" y="14" width="1.6" height="4.6" rx=".8"/>' },
+      '<path fill="#000000" d="M1.5 15a10.5 10.5 0 0 1 21 0h-2a8.5 8.5 0 0 0-17 0Z"/><rect fill="#000000" x=".55" y="12.4" width="3.8" height="7.7" rx="1.7"/><rect fill="#000000" x="19.65" y="12.4" width="3.8" height="7.7" rx="1.7"/><rect fill="#ffffff" x="1.4" y="14" width="1.6" height="4.6" rx=".8"/><rect fill="#ffffff" x="21" y="14" width="1.6" height="4.6" rx=".8"/>' },
     { value: "crown", label: "Crown", width: 3.25, anchor: "top", art:
-      '<path fill="#ac6321" d="M2.6 6 8 10l4-6 4 6 5.4-4-2 12.5a1 1 0 0 1-1 .9H5.6a1 1 0 0 1-1-.9Z"/><path fill="#ffc96a" d="M4.4 8.8 8.4 12 12 6.7l3.6 5.3 4-3.2-1.5 9.1H5.9Z"/><path fill="#fff4cd" d="m12 12 1.4 1.6-1.4 1.6-1.4-1.6Z"/>' },
+      '<path fill="#000000" d="M2.6 6 8 10l4-6 4 6 5.4-4-2 12.5a1 1 0 0 1-1 .9H5.6a1 1 0 0 1-1-.9Z"/><path fill="#ffffff" d="M4.4 8.8 8.4 12 12 6.7l3.6 5.3 4-3.2-1.5 9.1H5.9Z"/><path fill="#000000" d="m12 12 1.4 1.6-1.4 1.6-1.4-1.6Z"/>' },
     { value: "star-pin", label: "Star pin", width: 1.65, anchor: "pin", art:
-      '<path fill="#a05220" d="m12 1.6 3.05 6.3 6.95 1-5 4.9 1.18 6.9L12 17.45l-6.18 3.25L7 13.8 2 8.9l6.95-1Z"/><path fill="#ffd479" d="m12 5 2.03 4.2 4.63.67-3.34 3.26.79 4.61L12 15.56l-4.11 2.18.79-4.61-3.34-3.26 4.63-.67Z"/>' },
+      '<path fill="#000000" d="m12 1.6 3.05 6.3 6.95 1-5 4.9 1.18 6.9L12 17.45l-6.18 3.25L7 13.8 2 8.9l6.95-1Z"/><path fill="#ffffff" d="m12 5 2.03 4.2 4.63.67-3.34 3.26.79 4.61L12 15.56l-4.11 2.18.79-4.61-3.34-3.26 4.63-.67Z"/>' },
     { value: "scarf", label: "Scarf", width: 4.1, anchor: "chest", art:
-      '<path fill="#285e9e" d="M16 10h5l1.3 8.7-2 2.4-3.8-1.7Z"/><path fill="#457ec6" d="M3.5 6.8q8.5 3 17 0 1.4-.5 1.6 1l.4 3.4q.1 1.2-1.2 1.6Q12 16 2.7 12.8q-1.3-.4-1.2-1.6l.4-3.4q.2-1.5 1.6-1Z"/><path fill="#b6d4ff" d="M4 9.2q8 2.7 16 0l.2 1.1q-8.2 2.8-16.4 0Z"/>' },
+      '<path fill="#000000" d="M16 10h5l1.3 8.7-2 2.4-3.8-1.7Z"/><path fill="#000000" d="M3.5 6.8q8.5 3 17 0 1.4-.5 1.6 1l.4 3.4q.1 1.2-1.2 1.6Q12 16 2.7 12.8q-1.3-.4-1.2-1.6l.4-3.4q.2-1.5 1.6-1Z"/><path fill="#ffffff" d="M4 9.2q8 2.7 16 0l.2 1.1q-8.2 2.8-16.4 0Z"/>' },
   ].map(option => option.art ? { ...option, icon: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">${option.art}</svg>` } : option);
   let eyeShape3D = eyeShapes.find(shape => shape.value === params.get("eyes"))?.value ?? "round";
   let accessory3D = accessories.find(option => option.value === params.get("accessory")) ?? accessories[0];
@@ -1163,7 +1152,6 @@ globalThis.Sycritters = (function () {
   let activeMenu = null;
   const compactWall = matchMedia("(max-width: 590px)");
   let wallPage = 0;
-  const starterButtons = [...$("presets3D").querySelectorAll("button[data-seed]")];
   const shapePreviews = [];
   const requestedView = params.get("view");
   let show3D = requestedView === "3d" ||
@@ -1182,7 +1170,7 @@ globalThis.Sycritters = (function () {
     return { ...spec, eyes: { ...spec.eyes, style: "normal" } };
   }
 
-  let current = force2x2Eyes(specFromURL() || S.generate(show3D ? starterButtons[0].dataset.seed : "sycritter"));
+  let current = force2x2Eyes(specFromURL() || S.generate(show3D ? "mint-26802" : "sycritter"));
   let bodyAnimMode = "none";
   let pushDir = "r";   // active push direction (push wall)
   let pushDirB = "l";  // the "transition to" direction for the A⇄B push export
@@ -1252,7 +1240,6 @@ globalThis.Sycritters = (function () {
     $("view3D").setAttribute("aria-pressed", String(show3D));
     $("pixelStage").setAttribute("aria-hidden", String(show3D));
     $("toolbar3D").hidden = !show3D;
-    $("presets3D").hidden = !show3D;
     $("exportLabel").textContent = show3D ? "▪ Share" : "▪ Export";
     updateURL();
     lastFrame = -1;
@@ -1299,9 +1286,6 @@ globalThis.Sycritters = (function () {
     // reproduce this critter (the URL still will)
     const pristine = isPristineSpec(current);
     els.seedReadout.textContent = current.seed + (pristine ? "" : " · edited");
-    for (const button of starterButtons) {
-      button.setAttribute("aria-pressed", String(pristine && current.seed === button.dataset.seed));
-    }
     updateURL();
     syncControls();
     preview3D?.setCritter(current);
@@ -1671,7 +1655,11 @@ globalThis.Sycritters = (function () {
       const allowMotion = !reducedMotion.matches;
       if (preview3D) {
         const hearing = sampleMic(t);
-        preview3D.draw(t, allowMotion && els.animEyes.checked, bodyAnimMode, allowMotion, hearing);
+        preview3D.draw(t, allowMotion && els.animEyes.checked, bodyAnimMode, allowMotion, hearing, null, {
+          enabled: micSession?.context?.state === "running" && !document.hidden,
+          speaking: Boolean(micSession?.voiced),
+          steady: t - (micSession?.steadySince ?? t) > 900,
+        });
         tickAutoSounds(t);
       }
     }
@@ -2255,6 +2243,7 @@ globalThis.Sycritters = (function () {
   function sampleMic(time) {
     const session = micSession;
     if (session?.context?.state !== "running" || !session.samples) {
+      if (session) session.voiced = false;
       setListening(false);
       return false;
     }
@@ -2267,6 +2256,8 @@ globalThis.Sycritters = (function () {
     // Prevent the critter from treating its own speakers as a new conversation.
     if (!listening && (!soundPreview.paused || time < soundGuardUntil)) {
       session.onset = null;
+      session.voiced = false;
+      session.steadySince = null;
       return false;
     }
     const threshold = listening ? Math.max(0.0025, session.noiseFloor * 1.7)
@@ -2274,10 +2265,16 @@ globalThis.Sycritters = (function () {
     if (volume > threshold) {
       session.onset ??= time;
       if (listening || time - session.onset >= 54) session.lastVoice = time;
+      const change = Math.abs(volume - (session.previousVolume ?? volume)) / Math.max(volume, 0.001);
+      if (change < 0.18) session.steadySince ??= time;
+      else session.steadySince = null;
     } else {
       session.onset = null;
       if (!listening) session.noiseFloor += (volume - session.noiseFloor) * 0.02;
+      session.steadySince = null;
     }
+    session.previousVolume = volume;
+    session.voiced = time - session.lastVoice < 180;
     setListening(time - session.lastVoice < 500, time);
     return listening;
   }
@@ -2292,9 +2289,6 @@ globalThis.Sycritters = (function () {
     preview3D?.setPreviewScale(Number(scaleInput.value) / 100);
     updateURL();
   });
-  for (const button of starterButtons) {
-    button.addEventListener("click", () => { setSeedAndRegen(button.dataset.seed); render(); });
-  }
 
   /* ---- video cast (named critters persisted to localStorage) ---------- */
   const CAST_KEY = "sycritters-video-cast";

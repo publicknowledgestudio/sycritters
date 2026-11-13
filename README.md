@@ -37,6 +37,12 @@ python3 -m http.server 4173 --bind 127.0.0.1
   doesn't show a permission prompt, open the same page in your regular browser.
   The page checks input volume locally and does not record or send audio.
   Click **Mic** again to turn it off.
+  Short pauses hold attention, then prompt a small nod; longer pauses become
+  curious waiting. During extended quiet, the critter alternates gentle glances,
+  blinks, bobs, thoughtful tilts, and floating rests. A steady sustained sound
+  can prompt a thoughtful tilt (an audio-pattern heuristic, not word recognition).
+  Speech smoothly interrupts rest. Choose Motion → None for these automatic
+  responses; manual motions and reduced-motion preferences take priority.
 - **Configure it.** Every critter uses 1–3 palette colors from a curated signal
   palette (a consecutive run around the hue wheel, so it's always harmonious)
   with a gradient style (none / diagonal left / diagonal right / radial). Pick a
