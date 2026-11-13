@@ -1,16 +1,42 @@
 # Sycritters
 
 A generator for **Sycritters** — 8×8 pixel creatures in one cohesive style.
-Everything lives in a single [`index.html`](index.html): a tiny, dependency-free
-engine plus a clean, flat playground (visually aligned with its sibling project,
-`5x5`).
+The pixel engine and playground live in [`index.html`](index.html). The optional
+3D preview loads [`critter-3d.mjs`](critter-3d.mjs) and a pinned version of Three.js.
 
 ## Use it
 
-Just open `index.html` in a browser. No build, no server, no dependencies.
+Serve the folder and open [the playground](http://127.0.0.1:4173/). It opens in
+3D and requires WebGL 2 and an internet connection to load Three.js. Select
+**Pixel** for the sprite view and exports, or open `index.html` directly
+to start in Pixel mode.
+
+```sh
+python3 -m http.server 4173 --bind 127.0.0.1
+```
 
 - **Seed → critter.** The same seed always makes the same critter. Type a seed,
   hit 🎲 for a random one, or **Surprise me**.
+- **The Wall.** Generate a grid of random critters and select one to edit.
+  In 3D mode the tiles are still renders.
+- **Explore in 3D.** Switch the editor to **3D** and try **Agent**, **Dome**, or
+  **Slant**. Drag the preview or focus it and use the arrow keys to orbit.
+  The main critter follows the cursor with its eyes and body between motions.
+  Top, Middle, and Bottom keep their pixel silhouettes and use up to four
+  layers of voxels. Ears and domes taper, waist cuts wrap around the sides,
+  and feet can sit at different depths.
+  Select **Solid** for one body color. Pick an eye shape under **Eyes**, or add
+  a bow tie, headphones, crown, star pin, or scarf under **Accessories**.
+  Switch between **Pixel** and **3D** to watch the sprite gain depth and turn.
+  The **24 px** avatar shares the full preview's expression and idle breathing.
+  **Scale** changes the main preview without resizing the avatar.
+  A 3D share link includes the eye shape, accessory, scale, and critter spec.
+- **Talk to it.** In 3D, click **Mic** and allow microphone access. The critter
+  looks toward you when it detects your voice and relaxes when you stop.
+  The input meter shows what the browser is receiving. If an embedded preview
+  doesn't show a permission prompt, open the same page in your regular browser.
+  The page checks input volume locally and does not record or send audio.
+  Click **Mic** again to turn it off.
 - **Configure it.** Every critter uses 1–3 palette colors from a curated signal
   palette (a consecutive run around the hue wheel, so it's always harmonious)
   with a gradient style (none / diagonal left / diagonal right / radial). Pick a
@@ -30,12 +56,16 @@ Just open `index.html` in a browser. No build, no server, no dependencies.
   **sad**, and **excited**. Body and eye states use stepped pixel-art timing;
   scanning and processing use smoother highlight sweeps for a more product-ready
   agent feel. A size-adjustable **mini preview** shows the critter scaled down.
+- **Preview sounds.** Open **Motion → Sounds** to play any of the five cues,
+  including the soft beeps and bright chirp from *One Slide at a Time*. In 3D,
+  **Auto sounds** adds a greeting on approach, a trill on tap, a soft beep
+  after you speak, and one cue when you select Sleep or Excited. The critter
+  stays quiet while you speak and limits how often it plays each kind of cue.
 - **Share it.** The URL always encodes the exact critter on screen — including
   manual edits — so copying the address (or the **Link** button) is a permalink.
   The seed field switches to the full share code after edits, and accepts that
   code when pasted back in. The seed plate shows `· edited` when overrides mean
   the base seed alone wouldn't reproduce it.
-- **The Wall.** A grid of random critters loads automatically; click any to load it.
 - **Export.** Download the critter as a crisp **PNG** or scalable **SVG**
   (captured at the gradient's current frame), or a 12-frame **sprite sheet**
   of its motion cycle.

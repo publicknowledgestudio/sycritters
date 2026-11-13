@@ -3,10 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Sycritters — pixel creature generator</title>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+<title>Sycritters — creature generator</title>
+<link rel="icon" href="data:," />
 <style>
   :root {
     --bg:          #ffffff;
@@ -16,15 +14,14 @@
     --text:        #1a1a1a;
     --text-dim:    #888888;
     --accent:      #ff3e00;
-    --display: "Silkscreen", ui-monospace, monospace;
-    --mono:    "DM Mono", ui-monospace, "Cascadia Mono", monospace;
+    --sans: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   }
 
   * { box-sizing: border-box; }
   html { -webkit-text-size-adjust: 100%; }
   body {
     margin: 0;
-    font-family: var(--mono);
+    font-family: var(--sans);
     font-size: 13px;
     color: var(--text);
     background: var(--bg);
@@ -41,8 +38,8 @@
   /* ---- masthead ---- */
   .masthead { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; margin-bottom: 36px; }
   .wordmark {
-    font-family: var(--display); font-weight: 700;
-    font-size: 28px; letter-spacing: 2px; line-height: 1; margin: 0; color: var(--text);
+    font-weight: 750;
+    font-size: 26px; letter-spacing: -.04em; line-height: 1; margin: 0; color: var(--text);
   }
   .wordmark b { color: var(--accent); font-weight: 700; }
   .tagline { font-size: 11px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; }
@@ -51,16 +48,115 @@
   .stage { display: grid; gap: 40px; align-items: start; grid-template-columns: minmax(0, 1fr) 280px; }
   @media (max-width: 820px) {
     .stage { grid-template-columns: 1fr; }
-    .specimen { position: static; }
   }
 
   /* specimen (the editor preview) */
   .specimen { display: flex; flex-direction: column; gap: 12px; position: sticky; top: 24px; }
   .specimen__card {
-    background: var(--surface); border: 1px solid var(--border);
-    display: grid; place-items: center; padding: 16px; aspect-ratio: 1;
+    position: absolute; inset: 0; display: grid; place-items: center;
+    opacity: calc(1 - var(--model-opacity, 0));
   }
-  #editor { image-rendering: pixelated; width: 100%; max-width: 460px; height: auto; display: block; }
+  /* Align the 12-cell padded sprite with the orthographic camera's 10.2 × 10.6 minimum span. */
+  #editor { image-rendering: pixelated; width: min(117.64cqw, 113.2cqh); height: auto; display: block; }
+  .preview-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+  .view-switch { display: flex; gap: 6px; }
+  .stage-3d {
+    position: relative; width: 88%; margin-inline: auto; aspect-ratio: 1.22; container-type: size;
+    overflow: hidden;
+  }
+  .stage-3d > canvas {
+    position: absolute; inset: 0; width: 100%; height: 100%; display: block;
+    opacity: var(--model-opacity, 0); pointer-events: none;
+    filter: drop-shadow(0 1px 2px #20243435) drop-shadow(0 0 12px var(--glow-color, transparent));
+  }
+  .stage-3d > canvas[tabindex="0"] { cursor: grab; pointer-events: auto; }
+  .stage-3d > canvas:active { cursor: grabbing; }
+  .stage-3d > canvas:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+  .stage-3d__status {
+    position: absolute; inset: 0; display: grid; place-content: center; margin: 0;
+    padding: 20px; text-align: center; color: #dce5ee; background: #161f2c;
+  }
+  .stage-3d__status[hidden], .stage-3d__toolbar[hidden],
+  .presets[hidden] { display: none; }
+  #app[data-view="3d"] [data-pixel-only] { display: none; }
+  [data-3d-only], .editor-menus, .wall-pages { display: none; }
+  #app[data-view="3d"] [data-3d-only]:not([hidden]) { display: block; }
+  html:has(#app[data-view="3d"]) { overflow: hidden; }
+  #app[data-view="3d"] {
+    height: 100dvh; max-width: 1060px; padding: 16px 24px 12px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  #app[data-view="3d"] .masthead { margin: 0; align-items: center; min-height: 28px; }
+  #app[data-view="3d"] .tagline, #app[data-view="3d"] .foot { display: none; }
+  #app[data-view="3d"] .wall { margin: 0; }
+  #app[data-view="3d"] .wall__head { margin-bottom: 6px; }
+  #app[data-view="3d"] .wall-pages { display: flex; align-items: center; gap: 5px; }
+  #app[data-view="3d"] #genWall { margin-left: auto; }
+  #app[data-view="3d"] .wall__grid { grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 5px; }
+  #app[data-view="3d"] .tile { padding: 3px; height: clamp(32px, 9dvh, 68px); aspect-ratio: auto; display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr); }
+  #app[data-view="3d"] .tile[hidden] { display: none; }
+  #app[data-view="3d"] .tile canvas { width: 100%; height: 100%; object-fit: contain; }
+  #app[data-view="3d"] .tile[aria-pressed="true"] { border-color: var(--accent); }
+  #app[data-view="3d"] .stage {
+    position: relative; display: flex; flex: 1; min-height: 0; flex-direction: column; gap: 8px; align-items: stretch;
+  }
+  #app[data-view="3d"] .specimen { position: static; flex: 1; min-height: 0; gap: 6px; }
+  #app[data-view="3d"] #preview3D { display: flex; flex: 1; min-height: 0; flex-direction: column; }
+  #app[data-view="3d"] .stage-3d {
+    width: min(100%, 600px); flex: 1; min-height: 0; max-height: none; aspect-ratio: auto;
+  }
+  #app[data-view="3d"] .stage-3d__toolbar { margin-top: 0; }
+  #app[data-view="3d"] .controls { position: absolute; bottom: calc(var(--menu-height, 34px) + 8px); right: 0; width: min(380px, 100%); z-index: 4; }
+  #app[data-view="3d"] .controls > .ctl { display: none; }
+  #app[data-view="3d"] .controls > .ctl.is-open {
+    display: block; max-height: min(440px, 65dvh); overflow: auto;
+    border-radius: 12px; box-shadow: 0 12px 36px #25263826;
+  }
+  #app[data-view="3d"] .editor-menus { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); grid-auto-rows: 34px; gap: 5px; }
+  .editor-menus .btn { padding: 4px 2px; }
+  .editor-menus .btn[aria-expanded="true"] { color: var(--surface); background: var(--text); border-color: var(--text); }
+  .wall-pages button { padding: 5px 7px; }
+  .wall-pages button:disabled { opacity: .4; cursor: default; }
+  #app[data-view="3d"] #bodyAnim { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  #app[data-view="3d"] #bodyAnim button { padding: 5px 3px; font-size: 10px; }
+  #app[data-view="3d"] #eyeShape3D { display: grid; }
+  #app[data-view="3d"] .stage-3d__hint { margin-left: auto; }
+  @media (max-width: 590px) {
+    #app[data-view="3d"] { padding-inline: 10px; gap: 8px; }
+    #app[data-view="3d"] .wall__grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+    #app[data-view="3d"] .stage { --menu-height: 112px; }
+    #app[data-view="3d"] .editor-menus { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    #app[data-view="3d"] .controls > .ctl.is-open { max-height: min(58dvh, calc(100dvh - 260px)); }
+    #app[data-view="3d"] .stage-3d__hint { display: none; }
+  }
+  .stage-3d__hint { margin: 0; font-size: 11px; color: #5a5a5a; }
+  .stage-3d__toolbar {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 8px;
+  }
+  .stage-3d__toolbar #resetOrbit { margin-left: auto; }
+  .preview-scale { display: inline-flex; align-items: center; gap: 5px; }
+  .preview-scale input { width: clamp(42px, 9vw, 78px); margin: 0; accent-color: var(--accent); }
+  .preview-scale output { min-width: 3.5ch; font-variant-numeric: tabular-nums; }
+  #micToggle { padding: 6px 8px; }
+  #micToggle svg { width: 14px; height: 14px; }
+  #micToggle[data-listening="true"] { background: #d8fbe9; border-color: #23875c; color: #155537; }
+  .mic-feedback { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 8px; min-height: 1.4em; color: #565656; font-size: 12px; }
+  .mic-feedback p { margin: 0; }
+  .mic-feedback meter { width: 55px; height: 10px; accent-color: #23875c; }
+  .mic-feedback a { color: inherit; font-weight: 650; }
+  #app:not([data-view="3d"]) .mic-feedback { display: none; }
+  .avatar-preview {
+    display: inline-flex; align-items: center; gap: 7px; min-height: 32px; padding: 3px 8px;
+    border: 1px solid var(--border); font-size: 11px; color: #5a5a5a; white-space: nowrap;
+  }
+  .avatar-preview canvas { display: block; width: 24px; height: 24px; }
+  .avatar-preview[hidden] { display: none; }
+  .presets { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+  .presets-label { margin: 0 5px 0 0; font-size: 11px; color: #5a5a5a; }
+  @media (min-width: 821px) {
+    .stage-3d { max-height: max(264px, calc((100svh - 240px) * 0.88)); }
+  }
+  @media (max-width: 820px) { .stage .specimen { position: static; } }
   .specimen__plate {
     display: flex; align-items: baseline; gap: 10px;
     font-size: 11px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase;
@@ -90,18 +186,18 @@
   .controls { display: flex; flex-direction: column; gap: 20px; }
   .ctl { background: var(--surface); border: 1px solid var(--border); padding: 16px; }
   .ctl__label {
-    display: block; font-family: var(--display); font-size: 10px; letter-spacing: 2px;
-    text-transform: uppercase; color: var(--text-dim);
+    display: block; font-size: 13px; font-weight: 650; color: var(--text);
     margin: 0 0 14px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
   }
-  .ctl__label span { font-family: var(--mono); letter-spacing: .5px; text-transform: none; }
+  .ctl__label span { font-weight: 400; color: #5a5a5a; }
   .sublabel {
-    display: block; font-family: var(--mono); font-size: 10px; letter-spacing: 1px;
-    text-transform: uppercase; color: var(--text-dim); margin: 12px 0 6px;
+    display: block; font-size: 12px; font-weight: 550;
+    color: #5a5a5a; margin: 12px 0 6px;
+    text-transform: capitalize;
   }
 
   .field {
-    font-family: var(--mono); font-size: 12px; color: var(--text);
+    font-family: inherit; font-size: 13px; color: var(--text);
     background: var(--surface); border: 1px solid var(--border);
     padding: 7px 9px; width: 100%; outline: none; transition: border-color .15s;
   }
@@ -109,7 +205,7 @@
 
   .btn {
     display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-    font-family: var(--display); font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
+    font-family: inherit; font-size: 12px; font-weight: 550;
     background: var(--surface); color: var(--text); border: 1px solid var(--border);
     padding: 9px 12px; cursor: pointer; user-select: none; transition: all .12s;
   }
@@ -138,12 +234,22 @@
   .seg { display: flex; flex-wrap: wrap; gap: 6px; }
   .seg + .seg { margin-top: 8px; }
   .seg button {
-    font-family: var(--mono); font-size: 11px; letter-spacing: .5px; text-transform: uppercase;
-    background: var(--surface); color: var(--text-dim); border: 1px solid var(--border);
+    font-family: inherit; font-size: 12px;
+    background: var(--surface); color: #555; border: 1px solid var(--border);
     padding: 5px 9px; cursor: pointer; transition: all .12s;
   }
   .seg button:hover { border-color: var(--border-hover); color: var(--text); }
   .seg button[aria-pressed="true"] { background: var(--text); color: var(--surface); border-color: var(--text); }
+  #soundOptions button { display: inline-flex; align-items: center; gap: 6px; }
+  #soundOptions button[data-playing="true"] { border-color: var(--text); color: var(--text); background: #f2f2ef; }
+  #autoSoundsHint { margin: 3px 0 0; color: #555; font-size: 12px; }
+  #soundStatus:not(:empty) { margin: 6px 0 0; color: #555; font-size: 12px; }
+  #soundStatus:empty { margin: 0; }
+  .seg--icons { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .seg--icons button { display: flex; align-items: center; gap: 6px; min-height: 36px; padding: 4px 6px; text-align: left; }
+  .option-icon { display: grid; flex: 0 0 23px; place-items: center; width: 23px; height: 23px; }
+  .option-icon svg { display: block; width: 100%; height: 100%; }
+  #eyeShape3D .option-icon { background: #dff4e9; border-radius: 5px; }
   /* options random generation skips (manual / Surprise Me territory) */
   .seg button.spice::after { content: "·"; color: var(--accent); margin-left: 4px; font-weight: 700; }
   .seg--preview button {
@@ -157,6 +263,9 @@
   }
   .mini8 i { width: 3px; height: 3px; background: #ecece8; display: block; }
   .mini8 i.on { background: var(--text); }
+  .shape-thumbnail { display: none; flex: 0 0 36px; width: 36px; height: 36px; }
+  .show-shape-thumbnails .mini8 { display: none; }
+  .show-shape-thumbnails .shape-thumbnail { display: block; }
   .seg button[aria-pressed="true"] .mini8 { border-color: var(--surface); background: #3a3a3a; }
   .seg button[aria-pressed="true"] .mini8 i { background: #4f4f4f; }
   .seg button[aria-pressed="true"] .mini8 i.on { background: var(--surface); }
@@ -175,7 +284,7 @@
   .wall { margin: 0 0 44px; }
   .wall__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; gap: 14px; }
   .wall__head h2 {
-    font-family: var(--display); font-size: 12px; letter-spacing: 2px; text-transform: uppercase;
+    font-size: 13px; font-weight: 650;
     margin: 0; color: var(--text);
   }
   .wall__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 10px; }
@@ -186,6 +295,9 @@
   }
   .tile:hover, .tile:focus-visible { border-color: var(--accent); }
   .tile canvas { display: block; width: 100%; height: auto; image-rendering: pixelated; }
+  .tile .wall-model { display: none; image-rendering: auto; }
+  #app[data-view="3d"] .tile .wall-model:not([hidden]) { display: block; }
+  #app[data-view="3d"] .tile:has(.wall-model:not([hidden])) .wall-sprite { display: none; }
   .wall__empty { color: var(--text-dim); font-size: 12px; padding: 16px 2px; }
 
   /* ---- video cast ---- */
@@ -202,7 +314,7 @@
   }
   .cast__remove {
     position: absolute; top: 2px; right: 2px;
-    font-family: var(--mono); font-size: 12px; line-height: 1;
+    font-family: inherit; font-size: 12px; line-height: 1;
     background: var(--surface); color: var(--text-dim);
     border: 1px solid transparent; padding: 2px 5px; cursor: pointer;
   }
@@ -210,7 +322,7 @@
   .cast__row { display: flex; flex-wrap: wrap; gap: 4px; }
   .cast__row .cast__dl { flex: 1; }
   .cast__cycle, .cast__fmt {
-    flex: 1; min-width: 0; font-family: var(--mono); font-size: 11px;
+    flex: 1; min-width: 0; font-family: inherit; font-size: 11px;
     color: var(--text); background: var(--surface);
     border: 1px solid var(--border); padding: 3px 4px; outline: none;
   }
@@ -235,22 +347,64 @@
 <main id="app">
   <header class="masthead">
     <h1 class="wordmark">SY<b>CRITTERS</b></h1>
-    <p class="tagline">an 8&times;8 pixel creature generator</p>
+    <p class="tagline">an 8&times;8 creature generator</p>
   </header>
 
   <section class="wall">
     <div class="wall__head">
       <h2>The Wall</h2>
       <button id="genWall" class="btn">Generate &#9656;</button>
+      <div class="wall-pages" aria-label="Wall pages">
+        <button id="wallPrevious" class="btn" type="button" aria-label="Previous wall page">&larr;</button>
+        <button id="wallNext" class="btn" type="button" aria-label="Next wall page">&rarr;</button>
+      </div>
     </div>
     <div id="grid" class="wall__grid"></div>
   </section>
 
-  <section class="stage">
+  <section class="stage" id="playground">
     <div class="specimen">
-      <div class="specimen__card"><canvas id="editor" width="256" height="256" role="img" aria-label="current critter preview"></canvas></div>
+      <div class="preview-bar">
+        <div class="view-switch" role="group" aria-label="Preview mode">
+          <button class="btn" id="viewPixel" type="button" aria-pressed="true" aria-controls="pixelStage">Pixel</button>
+          <button class="btn" id="view3D" type="button" aria-pressed="false" aria-controls="preview3D">3D</button>
+        </div>
+        <div class="presets seg" id="presets3D" role="group" aria-label="3D starter seeds" hidden>
+          <span class="presets-label">Try a seed</span>
+          <button type="button" data-seed="mint-26802" aria-pressed="false">Agent</button>
+          <button type="button" data-seed="dome-955" aria-pressed="false">Dome</button>
+          <button type="button" data-seed="opal" aria-pressed="false">Slant</button>
+        </div>
+      </div>
+      <div id="preview3D">
+        <div class="stage-3d" id="stage3D">
+          <div class="specimen__card" id="pixelStage"><canvas id="editor" width="256" height="256" role="img" aria-label="current critter preview"></canvas></div>
+          <p class="stage-3d__status" id="status3D" role="status" hidden>Loading 3D preview…</p>
+        </div>
+        <div class="stage-3d__toolbar" id="toolbar3D" hidden>
+          <div class="avatar-preview" id="avatarPreview" hidden>
+            <canvas id="avatar3D" width="48" height="48" role="img" aria-label="Animated 3D critter at 24 pixels"></canvas>
+            <span>24 px</span>
+          </div>
+          <p class="stage-3d__hint" id="orbitHint">Drag or use arrow keys to orbit</p>
+          <label class="preview-scale" title="Scale the main preview">
+            Scale <input id="previewScale" type="range" min="50" max="115" step="5" value="100" />
+            <output id="previewScaleValue" for="previewScale" aria-hidden="true">100%</output>
+          </label>
+          <button class="btn" id="micToggle" type="button" aria-pressed="false" aria-describedby="micStatus" disabled>
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><rect x="6" y="1.5" width="4" height="8" rx="2"/><path d="M3.5 7.5a4.5 4.5 0 0 0 9 0M8 12v2.5m-2 0h4"/></svg>
+            Mic
+          </button>
+          <button class="btn" id="resetOrbit" type="button" disabled>Reset view</button>
+        </div>
+        <div class="mic-feedback">
+          <p id="micStatus" role="status"></p>
+          <meter id="micLevel" min="0" max="1" value="0" aria-label="Microphone input level" hidden></meter>
+          <a id="micBrowserLink" href="./index.html?view=3d" target="_blank" rel="noopener" hidden>Open in a browser</a>
+        </div>
+      </div>
       <div class="specimen__plate"><span class="k">SEED</span><span class="v" id="seedReadout">&mdash;</span></div>
-      <div class="specimen__mini">
+      <div class="specimen__mini" data-pixel-only>
         <div class="specimen__mini-stage"><canvas id="miniPreview" role="img" aria-label="scaled critter preview"></canvas></div>
         <label class="specimen__mini-ctl">
           <span class="k">SIZE</span>
@@ -260,8 +414,19 @@
       </div>
     </div>
 
+    <nav class="editor-menus" aria-label="Critter editing">
+      <button class="btn" type="button" aria-expanded="false" aria-controls="seedMenu">Seed</button>
+      <button class="btn" type="button" aria-expanded="false" aria-controls="colorMenu">Color</button>
+      <button class="btn" type="button" aria-expanded="false" aria-controls="topMenu">Top</button>
+      <button class="btn" type="button" aria-expanded="false" aria-controls="middleMenu">Middle</button>
+      <button class="btn" type="button" aria-expanded="false" aria-controls="bottomMenu">Bottom</button>
+      <button class="btn" type="button" aria-expanded="false" aria-controls="eyesMenu">Eyes</button>
+      <button class="btn" type="button" aria-expanded="false" aria-controls="accessoryMenu">Accessories</button>
+      <button class="btn" type="button" aria-expanded="false" aria-controls="motionMenu">Motion</button>
+      <button class="btn" type="button" aria-expanded="false" aria-controls="shareMenu">Share</button>
+    </nav>
     <aside class="controls">
-      <div class="ctl">
+      <div class="ctl" id="seedMenu">
         <label class="ctl__label" for="seed">&#9646; Seed</label>
         <div class="seedrow">
           <input id="seed" class="field" spellcheck="false" autocomplete="off" />
@@ -270,7 +435,7 @@
         <button id="surprise" class="btn btn--full">Surprise me</button>
       </div>
 
-      <div class="ctl">
+      <div class="ctl" id="colorMenu">
         <label class="ctl__label">&#9646; Color</label>
         <div id="palette" class="swatches"></div>
         <span class="sublabel">colors</span>
@@ -279,27 +444,30 @@
         <div id="gradDir" class="seg"></div>
       </div>
 
-      <div class="ctl">
+      <div class="ctl" id="topMenu">
         <label class="ctl__label">&#9646; Top</label>
         <div id="tops" class="seg seg--preview"></div>
       </div>
 
-      <div class="ctl">
+      <div class="ctl" id="middleMenu">
         <label class="ctl__label">&#9646; Middle <span>&mdash; the two waist rows</span></label>
         <div id="waist" class="seg seg--preview"></div>
       </div>
 
-      <div class="ctl">
+      <div class="ctl" id="bottomMenu">
         <label class="ctl__label">&#9646; Bottom</label>
         <div id="bottoms" class="seg seg--preview"></div>
       </div>
 
-      <div class="ctl">
+      <div class="ctl" id="eyesMenu">
         <label class="ctl__label">&#9646; Eyes</label>
-        <span class="sublabel">style</span>
-        <div id="eyeStyle" class="seg"></div>
-        <span class="sublabel">pupil</span>
-        <div id="eyePupil" class="seg" title="dot = 1px, bar = 1x2 column (2x2 eyes)"></div>
+        <div id="eyeShape3D" class="seg seg--icons" data-3d-only role="group" aria-label="Eye shape"></div>
+        <span class="sublabel" data-pixel-only>style</span>
+        <div id="eyeStyle" class="seg" data-pixel-only></div>
+        <div id="pupilOptions">
+          <span class="sublabel">pupil</span>
+          <div id="eyePupil" class="seg" title="dot = 1px, bar = 1x2 column (2x2 eyes)"></div>
+        </div>
         <span class="sublabel">gaze</span>
         <div id="eyeMirror" class="seg" title="mirrored = pupils point inward/outward together"></div>
         <span class="sublabel">gap</span>
@@ -309,7 +477,12 @@
         <label class="check"><input type="checkbox" id="animEyes" checked /> animate eyes</label>
       </div>
 
-      <div class="ctl">
+      <div class="ctl" id="accessoryMenu" data-3d-only>
+        <p class="ctl__label">Accessories</p>
+        <div id="accessoryOptions" class="seg seg--icons" role="group" aria-label="Accessory"></div>
+      </div>
+
+      <div class="ctl" id="motionMenu">
         <label class="ctl__label">&#9646; Motion</label>
         <div id="bodyAnim" class="seg"></div>
         <div id="pushPanel" hidden>
@@ -318,32 +491,44 @@
           <span class="sublabel">transition to</span>
           <div id="pushDirB" class="seg" title="second push direction for the A&#8644;B transition clip"></div>
           <button id="pushPlay" class="btn btn--full" style="margin-top:8px" title="preview the A&#8644;B push transition in the editor">&#9656; play transition</button>
-          <span class="sublabel">export current push / transition</span>
-          <div class="exportrow">
+          <span class="sublabel" data-pixel-only>export current push / transition</span>
+          <div class="exportrow" data-pixel-only>
             <select id="pushFmt" class="field" aria-label="export format" style="flex:1"></select>
             <button id="pushExport" class="btn" title="export the current push or transition in the chosen format">&#10515; export</button>
           </div>
         </div>
+        <p class="sublabel" id="soundsLabel">Sounds</p>
+        <div id="soundOptions" class="seg" role="group" aria-labelledby="soundsLabel">
+          <button type="button" data-sound="hello"><span aria-hidden="true">▶</span> Hello</button>
+          <button type="button" data-sound="soft-beeps"><span aria-hidden="true">▶</span> Soft beeps</button>
+          <button type="button" data-sound="bright-chirp"><span aria-hidden="true">▶</span> Bright chirp</button>
+          <button type="button" data-sound="curious-trill"><span aria-hidden="true">▶</span> Curious trill</button>
+          <button type="button" data-sound="sleepy-hum"><span aria-hidden="true">▶</span> Sleepy hum</button>
+        </div>
+        <label class="check" data-3d-only><input type="checkbox" id="autoSounds" aria-describedby="autoSoundsHint" /> Auto sounds</label>
+        <p id="autoSoundsHint" data-3d-only>Greets you when you approach, beeps after you speak, and reacts to a tap or a change in mood.</p>
+        <p id="soundStatus" role="status"></p>
+        <audio id="soundPreview" preload="none"></audio>
       </div>
 
-      <div class="ctl">
-        <label class="ctl__label">&#9646; Export</label>
+      <div class="ctl" id="shareMenu">
+        <label class="ctl__label" id="exportLabel">&#9646; Export</label>
         <div class="exportrow">
-          <button id="png" class="btn">PNG</button>
-          <button id="svg" class="btn">SVG</button>
-          <button id="sheet" class="btn" title="12-frame sprite sheet">Sheet</button>
+          <button id="png" class="btn" data-pixel-only>PNG</button>
+          <button id="svg" class="btn" data-pixel-only>SVG</button>
+          <button id="sheet" class="btn" title="12-frame sprite sheet" data-pixel-only>Sheet</button>
           <button id="link" class="btn" title="copy a shareable link">Link</button>
         </div>
       </div>
 
-      <div class="ctl">
+      <div class="ctl" data-pixel-only>
         <label class="ctl__label">&#9646; Video</label>
         <button id="addCast" class="btn btn--full">Add to Video Cast</button>
       </div>
     </aside>
   </section>
 
-  <section class="cast">
+  <section class="cast" data-pixel-only>
     <div class="wall__head">
       <h2>Video Cast</h2>
       <div class="exportrow">
@@ -881,6 +1066,14 @@ globalThis.Sycritters = (function () {
 </script>
 <!-- SYCRITTERS-ENGINE:END -->
 
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.min.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+  }
+}
+</script>
 <script>
   /* ---- Renderers (canvas painting; pure helpers live in the engine) --- */
   const { cellFill, gradientPaint, toSVG, specToString, specFromString } = Sycritters;
@@ -932,6 +1125,51 @@ globalThis.Sycritters = (function () {
     genWall: $("genWall"), grid: $("grid"),
   };
 
+  const params = new URLSearchParams(location.search);
+  const eyeShapes = [
+    ["round", "Round", '<circle cx="12" cy="12" r="8.4"/>', '<circle cx="12" cy="12" r="4.4"/>'],
+    ["oval", "Oval", '<ellipse cx="12" cy="12" rx="6.7" ry="8.4"/>', '<ellipse cx="12" cy="12" rx="3.8" ry="4.7"/>'],
+    ["soft-square", "Soft square", '<rect x="3.6" y="3.6" width="16.8" height="16.8" rx="4.2"/>', '<circle cx="12" cy="12" r="4.4"/>'],
+    ["pixel", "Pixel", '<rect x="3.5" y="3.5" width="17" height="17"/>', '<rect x="6" y="3.5" width="8.5" height="17"/>'],
+    ["wide", "Wide", '<ellipse cx="12" cy="12" rx="8.4" ry="5.6"/>', '<circle cx="12" cy="12" r="3.2"/>'],
+    ["almond", "Almond", '<path d="M3.6 12q8.4-13.6 16.8 0q-8.4 13.6-16.8 0Z"/>', '<circle cx="12" cy="12" r="3.7"/>'],
+    ["sleepy", "Sleepy", '<rect x="3.6" y="8.7" width="16.8" height="6.6" rx="2.2"/>', '<ellipse cx="12" cy="12" rx="3.8" ry="2.6"/>'],
+  ].map(([value, label, white, pupil]) => ({
+    value, label, icon: `<svg viewBox="0 0 24 24"><g fill="#fff">${white}</g><g fill="#000">${pupil}</g></svg>`,
+  }));
+  const accessories = [
+    { value: "none", label: "None", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="7"/><path d="m7 17 10-10"/></svg>' },
+    { value: "bow-tie", label: "Bow tie", width: 3.15, anchor: "chest", art:
+      '<path fill="#7c324e" d="M3 5q1-1 8.5 4h1q7.5-5 8.5-4 1 1 1 7t-1 7q-1 1-8.5-4h-1Q4 20 3 19t-1-7q0-6 1-7Z"/><rect fill="#e98eae" x="9" y="9" width="6" height="6" rx="1.8"/>' },
+    { value: "headphones", label: "Headphones", width: 9.7, anchor: "head", art:
+      '<path fill="#393451" d="M1.5 15a10.5 10.5 0 0 1 21 0h-2a8.5 8.5 0 0 0-17 0Z"/><rect fill="#393451" x=".55" y="12.4" width="3.8" height="7.7" rx="1.7"/><rect fill="#393451" x="19.65" y="12.4" width="3.8" height="7.7" rx="1.7"/><rect fill="#b29cf5" x="1.4" y="14" width="1.6" height="4.6" rx=".8"/><rect fill="#b29cf5" x="21" y="14" width="1.6" height="4.6" rx=".8"/>' },
+    { value: "crown", label: "Crown", width: 3.25, anchor: "top", art:
+      '<path fill="#ac6321" d="M2.6 6 8 10l4-6 4 6 5.4-4-2 12.5a1 1 0 0 1-1 .9H5.6a1 1 0 0 1-1-.9Z"/><path fill="#ffc96a" d="M4.4 8.8 8.4 12 12 6.7l3.6 5.3 4-3.2-1.5 9.1H5.9Z"/><path fill="#fff4cd" d="m12 12 1.4 1.6-1.4 1.6-1.4-1.6Z"/>' },
+    { value: "star-pin", label: "Star pin", width: 1.65, anchor: "pin", art:
+      '<path fill="#a05220" d="m12 1.6 3.05 6.3 6.95 1-5 4.9 1.18 6.9L12 17.45l-6.18 3.25L7 13.8 2 8.9l6.95-1Z"/><path fill="#ffd479" d="m12 5 2.03 4.2 4.63.67-3.34 3.26.79 4.61L12 15.56l-4.11 2.18.79-4.61-3.34-3.26 4.63-.67Z"/>' },
+    { value: "scarf", label: "Scarf", width: 4.1, anchor: "chest", art:
+      '<path fill="#285e9e" d="M16 10h5l1.3 8.7-2 2.4-3.8-1.7Z"/><path fill="#457ec6" d="M3.5 6.8q8.5 3 17 0 1.4-.5 1.6 1l.4 3.4q.1 1.2-1.2 1.6Q12 16 2.7 12.8q-1.3-.4-1.2-1.6l.4-3.4q.2-1.5 1.6-1Z"/><path fill="#b6d4ff" d="M4 9.2q8 2.7 16 0l.2 1.1q-8.2 2.8-16.4 0Z"/>' },
+  ].map(option => option.art ? { ...option, icon: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">${option.art}</svg>` } : option);
+  let eyeShape3D = eyeShapes.find(shape => shape.value === params.get("eyes"))?.value ?? "round";
+  let accessory3D = accessories.find(option => option.value === params.get("accessory")) ?? accessories[0];
+  const scaleInput = $("previewScale");
+  const scaleValue = $("previewScaleValue");
+  const requestedScale = Number(params.get("scale"));
+  if (requestedScale >= Number(scaleInput.min) && requestedScale <= Number(scaleInput.max)) {
+    scaleInput.value = requestedScale;
+  }
+  scaleValue.value = scaleInput.value + "%";
+  const menuBar = document.querySelector(".editor-menus");
+  let activeMenu = null;
+  const compactWall = matchMedia("(max-width: 590px)");
+  let wallPage = 0;
+  const starterButtons = [...$("presets3D").querySelectorAll("button[data-seed]")];
+  const shapePreviews = [];
+  const requestedView = params.get("view");
+  let show3D = requestedView === "3d" ||
+    (!requestedView && !params.has("c") && location.protocol !== "file:");
+  let preview3D = null, loading3D = false;
+
   // Boot from a share URL (?c=<spec>) when present. We read the raw query
   // ourselves: URLSearchParams would percent-decode the seed early and a seed
   // containing "~" would then collide with the codec delimiter.
@@ -944,7 +1182,7 @@ globalThis.Sycritters = (function () {
     return { ...spec, eyes: { ...spec.eyes, style: "normal" } };
   }
 
-  let current = force2x2Eyes(specFromURL() || S.generate("sycritter"));
+  let current = force2x2Eyes(specFromURL() || S.generate(show3D ? starterButtons[0].dataset.seed : "sycritter"));
   let bodyAnimMode = "none";
   let pushDir = "r";   // active push direction (push wall)
   let pushDirB = "l";  // the "transition to" direction for the A⇄B push export
@@ -966,6 +1204,92 @@ globalThis.Sycritters = (function () {
     return isPristineSpec(spec) ? spec.seed : specToString(spec);
   }
 
+  function updateURL() {
+    const eyes = eyeShape3D === "round" ? "" : "&eyes=" + eyeShape3D;
+    const accessory = accessory3D.value === "none" ? "" : "&accessory=" + accessory3D.value;
+    const scale = scaleInput.value === "100" ? "" : "&scale=" + scaleInput.value;
+    const view = show3D ? "&view=3d" + eyes + accessory + scale : "&view=pixel";
+    try { history.replaceState(null, "", "?c=" + specToString(current) + view + location.hash); } catch {}
+  }
+
+  function setMenu(button) {
+    if (activeMenu) {
+      $(activeMenu.getAttribute("aria-controls")).classList.remove("is-open");
+      activeMenu.setAttribute("aria-expanded", "false");
+    }
+    activeMenu = button;
+    if (activeMenu) {
+      $(activeMenu.getAttribute("aria-controls")).classList.add("is-open");
+      activeMenu.setAttribute("aria-expanded", "true");
+    }
+  }
+
+  function showWallPage() {
+    const pageSize = compactWall.matches ? 6 : 10;
+    const pageCount = Math.ceil(wallTiles.length / pageSize);
+    wallPage = Math.min(wallPage, Math.max(0, pageCount - 1));
+    for (const [index, tile] of wallTiles.entries()) {
+      tile.button.hidden = show3D && Math.floor(index / pageSize) !== wallPage;
+    }
+    $("wallPrevious").disabled = wallPage === 0;
+    $("wallNext").disabled = wallPage + 1 >= pageCount;
+  }
+
+  async function setPreviewMode(use3D, animate = true) {
+    show3D = use3D;
+    if (!show3D) {
+      stopMic();
+      resetStagePointer();
+      if (soundIsAutomatic) stopSound();
+    }
+    $("app").dataset.view = show3D ? "3d" : "pixel";
+    setMenu(null);
+    showWallPage();
+    $("pupilOptions").hidden = show3D && eyeShape3D !== "pixel";
+    const controls = els.tops.closest(".controls");
+    controls.classList.toggle("show-shape-thumbnails", show3D && Boolean(preview3D));
+    $("viewPixel").setAttribute("aria-pressed", String(!show3D));
+    $("view3D").setAttribute("aria-pressed", String(show3D));
+    $("pixelStage").setAttribute("aria-hidden", String(show3D));
+    $("toolbar3D").hidden = !show3D;
+    $("presets3D").hidden = !show3D;
+    $("exportLabel").textContent = show3D ? "▪ Share" : "▪ Export";
+    updateURL();
+    lastFrame = -1;
+    if (preview3D) {
+      preview3D.setProjection(show3D, animate && !reducedMotion.matches);
+      return;
+    }
+    if (!show3D) $("status3D").hidden = true;
+    if (!show3D || loading3D) return;
+
+    loading3D = true;
+    const status = $("status3D");
+    status.hidden = true;
+    try {
+      const { createStage } = await import("./critter-3d.mjs");
+      preview3D = createStage($("stage3D"), $("avatar3D"), shapePreviews, S.rasterize, restPaint);
+      preview3D.setEyeShape(eyeShape3D);
+      preview3D.setAccessory(accessory3D);
+      preview3D.setPreviewScale(Number(scaleInput.value) / 100);
+      preview3D.setCritter(current);
+      preview3D.setWall(wallTiles);
+      preview3D.setProjection(show3D, animate && !reducedMotion.matches);
+      lastFrame = -1;
+      $("resetOrbit").disabled = false;
+      $("micToggle").disabled = false;
+      $("avatarPreview").hidden = false;
+      controls.classList.toggle("show-shape-thumbnails", show3D);
+      status.hidden = true;
+    } catch (error) {
+      status.hidden = !show3D;
+      status.textContent = "3D preview couldn’t start. Check WebGL and your connection, or switch to Pixel.";
+      console.warn("Could not start the 3D preview", error);
+    } finally {
+      loading3D = false;
+    }
+  }
+
   // render() now only reflects state into the controls; the animation loop
   // owns drawing the editor critter every frame from `current`.
   function render() {
@@ -975,8 +1299,12 @@ globalThis.Sycritters = (function () {
     // reproduce this critter (the URL still will)
     const pristine = isPristineSpec(current);
     els.seedReadout.textContent = current.seed + (pristine ? "" : " · edited");
-    try { history.replaceState(null, "", "?c=" + specToString(current)); } catch {}
+    for (const button of starterButtons) {
+      button.setAttribute("aria-pressed", String(pristine && current.seed === button.dataset.seed));
+    }
+    updateURL();
     syncControls();
+    preview3D?.setCritter(current);
     lastFrame = -1; // force the loop to redraw the editor on the next frame
   }
 
@@ -1295,7 +1623,7 @@ globalThis.Sycritters = (function () {
     if (!reducedMotion.matches && els.animEyes.checked && !mf.eyesDriven) {
       const e = eyeFrame(frame);
       const fr = { ...mf.fr, gaze: e.gaze, blink: e.blink };
-      return { grid: S.rasterize(current, fr), paint: mf.paint, transform: mf.transform };
+      return { ...mf, grid: S.rasterize(current, fr), fr };
     }
     return mf;
   }
@@ -1310,9 +1638,10 @@ globalThis.Sycritters = (function () {
   }
 
   function draw(frame) {
+    if (show3D && preview3D && !preview3D.transitioning()) return;
     const c = composeFrame(frame);
     drawCanvas(els.editor, c.grid, c.paint, EDITOR_SCALE, c.transform, EDITOR_PAD);
-    drawMini(c);
+    if (!show3D) drawMini(c);
   }
 
   // Cast cards play their selected cycle live (stepped at the integer frame).
@@ -1335,8 +1664,16 @@ globalThis.Sycritters = (function () {
     if (smoothState || frame !== lastFrame) {
       // skip redraws when nothing animates (lastFrame -1 forces one draw)
       if (lastFrame === -1 || editorAnimated()) draw(frame);
-      if (!reducedMotion.matches) drawCastPreviews(castFrameIndex);
+      if (!show3D && !reducedMotion.matches) drawCastPreviews(castFrameIndex);
       lastFrame = frame;
+    }
+    if (show3D || preview3D?.transitioning()) {
+      const allowMotion = !reducedMotion.matches;
+      if (preview3D) {
+        const hearing = sampleMic(t);
+        preview3D.draw(t, allowMotion && els.animEyes.checked, bodyAnimMode, allowMotion, hearing);
+        tickAutoSounds(t);
+      }
     }
     requestAnimationFrame(loop);
   }
@@ -1390,10 +1727,11 @@ globalThis.Sycritters = (function () {
     return bits;
   }
   function addPreview(button, kind, value, label) {
+    const grid = previewBits(kind, value);
     const mini = document.createElement("span");
     mini.className = "mini8";
     mini.setAttribute("aria-hidden", "true");
-    for (const row of previewBits(kind, value))
+    for (const row of grid)
       for (const cell of row) {
         const px = document.createElement("i");
         if (cell) px.className = "on";
@@ -1402,7 +1740,12 @@ globalThis.Sycritters = (function () {
     const text = document.createElement("span");
     text.className = "seg__text";
     text.textContent = label;
-    button.append(mini, text);
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 72;
+    canvas.className = "shape-thumbnail";
+    canvas.setAttribute("aria-hidden", "true");
+    shapePreviews.push({ canvas, grid, kind, value, centerY: { top: 6, waist: 4, bottom: 2 }[kind] });
+    button.append(mini, canvas, text);
   }
 
   function buildSeg(container, values, onPick, withRandom) {
@@ -1410,8 +1753,16 @@ globalThis.Sycritters = (function () {
     for (const item of values) {
       const opt = typeof item === "string" ? { value: item, label: item } : item;
       const b = document.createElement("button");
+      b.type = "button";
       b.dataset.value = opt.value;
       if (opt.preview) addPreview(b, opt.preview, opt.value, opt.label);
+      else if (opt.icon) {
+        const icon = document.createElement("span");
+        icon.className = "option-icon";
+        icon.setAttribute("aria-hidden", "true");
+        icon.innerHTML = opt.icon;
+        b.append(icon, opt.label);
+      }
       else b.textContent = opt.label;
       b.addEventListener("click", () => { onPick(opt.value); render(); });
       container.appendChild(b);
@@ -1430,7 +1781,7 @@ globalThis.Sycritters = (function () {
   function buildSegs() {
     buildSeg(els.colorCount, ["1", "2", "3"], (v) => setColorCount(Number(v)), false);
     buildSeg(els.gradDir, [
-      { value: "none", label: "None" },
+      { value: "none", label: "Solid" },
       { value: "diagonal-left", label: "Diagonal left" },
       { value: "diagonal-right", label: "Diagonal right" },
       { value: "radial", label: "Radial" },
@@ -1439,6 +1790,15 @@ globalThis.Sycritters = (function () {
     buildSeg(els.waist, ["straight", "pinch", "narrow", "bite-l", "bite-r"].map((v) => ({ value: v, label: v, preview: "waist" })), (v) => override({ waist: v }), false);
     buildSeg(els.bottoms, S.BOTTOMS.map((m) => ({ value: m.name, label: m.name, preview: "bottom" })), (v) => override({ bottom: v }), true);
     buildSeg(els.eyeStyle, ["normal"], (v) => override({ eyes: { ...current.eyes, style: v } }), false);
+    buildSeg($("eyeShape3D"), eyeShapes, value => {
+      eyeShape3D = value;
+      $("pupilOptions").hidden = value !== "pixel";
+      preview3D?.setEyeShape(value);
+    }, false);
+    buildSeg($("accessoryOptions"), accessories, value => {
+      accessory3D = accessories.find(option => option.value === value);
+      preview3D?.setAccessory(accessory3D);
+    }, false);
     buildSeg(els.eyePupil, ["dot", "bar"], (v) => override({ eyes: { ...current.eyes, pupil: v } }), false);
     buildSeg(els.eyeMirror, ["parallel", "mirrored"], (v) => override({ eyes: { ...current.eyes, mirror: v === "mirrored" } }), false);
     buildSeg(els.eyeGap, ["1", "2"], (v) => override({ eyes: { ...current.eyes, gap: Number(v) } }), false);
@@ -1488,6 +1848,8 @@ globalThis.Sycritters = (function () {
     setPressed(els.bottoms, (b) => b.dataset.value === current.bottom);
     setPressed(els.waist, (b) => b.dataset.value === current.waist);
     setPressed(els.eyeStyle, (b) => b.dataset.value === current.eyes.style);
+    setPressed($("eyeShape3D"), (b) => b.dataset.value === eyeShape3D);
+    setPressed($("accessoryOptions"), (b) => b.dataset.value === accessory3D.value);
     setPressed(els.eyePupil, (b) => b.dataset.value === (current.eyes.pupil || "dot"));
     setPressed(els.eyeMirror, (b) => b.dataset.value === (current.eyes.mirror ? "mirrored" : "parallel"));
     setPressed(els.eyeGap, (b) => b.dataset.value === String(current.eyes.gap));
@@ -1499,6 +1861,7 @@ globalThis.Sycritters = (function () {
     setPressed(els.pushDirB, (b) => b.dataset.value === pushDirB);
     els.pushPanel.hidden = String(bodyAnimMode).indexOf("push") !== 0;
     els.pushPlay.setAttribute("aria-pressed", String(bodyAnimMode).indexOf("pushx-") === 0 ? "true" : "false");
+    setPressed(els.grid, (b) => b.dataset.seed === current.seed);
   }
   // the editor's current push/transition cycle (skips a degenerate A==B pair)
   function transitionCycle() {
@@ -1511,6 +1874,7 @@ globalThis.Sycritters = (function () {
   function generateWall(n) {
     els.grid.innerHTML = "";
     wallTiles = [];
+    wallPage = 0;
     for (let i = 0; i < (n || 30); i++) {
       const seed = newSeed();
       const spec = S.generate(seed);
@@ -1518,13 +1882,25 @@ globalThis.Sycritters = (function () {
       const btn = document.createElement("button");
       btn.className = "tile"; btn.dataset.seed = seed; btn.title = seed;
       btn.setAttribute("aria-label", "load critter " + seed);
+      btn.setAttribute("aria-pressed", "false");
       const c = document.createElement("canvas");
+      c.className = "wall-sprite";
       drawCanvas(c, grid, restPaint(spec), 16);
-      btn.appendChild(c);
-      btn.addEventListener("click", () => { setSeedAndRegen(seed); render(); window.scrollTo({ top: 0, behavior: "smooth" }); });
+      const model = document.createElement("canvas");
+      model.className = "wall-model";
+      model.width = model.height = c.width;
+      model.hidden = true;
+      btn.append(c, model);
+      btn.addEventListener("click", () => {
+        current = spec;
+        render();
+        if (!show3D) $("playground").scrollIntoView({ behavior: reducedMotion.matches ? "instant" : "smooth" });
+      });
       els.grid.appendChild(btn);
-      wallTiles.push({ canvas: c, spec, grid });
+      wallTiles.push({ button: btn, model, spec, grid });
     }
+    showWallPage();
+    preview3D?.setWall(wallTiles);
   }
 
   /* export */
@@ -1617,8 +1993,308 @@ globalThis.Sycritters = (function () {
   els.pushPlay.addEventListener("click", () => { bodyAnimMode = transitionCycle(); render(); });
   els.pushExport.addEventListener("click", (e) =>
     exportAnimation(current, current.seed, bodyAnimMode, els.pushFmt.value, e.currentTarget));
+  const soundPreview = $("soundPreview");
+  const soundStatus = $("soundStatus");
+  const autoSounds = $("autoSounds");
+  const stage3D = $("stage3D");
+  let soundButton = null;
+  let soundRequest = 0;
+  let soundIsAutomatic = false;
+  let soundGuardUntil = -Infinity;
+  let nextAutoSound = 0;
+  let nextAcknowledgement = 0;
+  let lastApproach = -Infinity;
+  let greetAt = null;
+  let stagePointer = null;
+  let voiceStartedAt = null;
+
+  function clearSound() {
+    if (soundButton) {
+      delete soundButton.dataset.playing;
+      soundButton.firstElementChild.textContent = "▶";
+      soundButton = null;
+    }
+  }
+
+  function stopSound() {
+    soundRequest++;
+    soundPreview.pause();
+    soundIsAutomatic = false;
+    soundGuardUntil = performance.now() + 160;
+    clearSound();
+  }
+
+  async function playSound(button, automatic = false) {
+    const request = ++soundRequest;
+    soundIsAutomatic = automatic;
+    soundStatus.textContent = "";
+    clearSound();
+    soundButton = button;
+    soundPreview.src = "./sounds/" + button.dataset.sound + ".mp3";
+    try {
+      await soundPreview.play();
+      if (request !== soundRequest) return;
+      button.dataset.playing = "true";
+      button.firstElementChild.textContent = "♪";
+    } catch {
+      if (request !== soundRequest) return;
+      clearSound();
+      soundIsAutomatic = false;
+      soundStatus.textContent = automatic ? "Play a sound once to enable audio in this browser."
+        : "Couldn’t play that sound. Try again.";
+    }
+  }
+
+  function autoSound(name, time = performance.now()) {
+    const acknowledgement = name === "soft-beeps";
+    const readyAt = acknowledgement ? nextAcknowledgement : nextAutoSound;
+    if (!show3D || !autoSounds.checked || document.hidden || listening
+        || time < readyAt || !soundPreview.paused) return false;
+    nextAutoSound = time + 4000;
+    if (acknowledgement) nextAcknowledgement = nextAutoSound;
+    const button = $("soundOptions").querySelector(`[data-sound="${name}"]`);
+    void playSound(button, true);
+    return true;
+  }
+
+  function tickAutoSounds(time) {
+    if (greetAt === null || time < greetAt) return;
+    greetAt = null;
+    if (autoSound("hello", time)) lastApproach = time;
+  }
+
+  function resetStagePointer() {
+    stagePointer = null;
+    greetAt = null;
+    preview3D?.setPointer(null);
+  }
+
+  document.addEventListener("pointermove", event => {
+    if (!show3D || !preview3D || event.pointerType === "touch" || event.buttons || stagePointer) return;
+    const bounds = stage3D.getBoundingClientRect();
+    const clamp = n => Math.max(-1, Math.min(1, n));
+    if (!bounds.width || !bounds.height) return;
+    preview3D.setPointer({
+      x: clamp(2 * (event.clientX - bounds.left) / bounds.width - 1),
+      y: clamp(1 - 2 * (event.clientY - bounds.top) / bounds.height),
+    });
+  });
+  document.documentElement.addEventListener("pointerleave", resetStagePointer);
+  window.addEventListener("blur", resetStagePointer);
+  stage3D.addEventListener("pointerenter", event => {
+    const time = performance.now();
+    if (event.pointerType !== "touch" && autoSounds.checked && time - lastApproach > 12000) {
+      greetAt = time + 400;
+    }
+  });
+  stage3D.addEventListener("pointerleave", () => { greetAt = null; });
+  stage3D.addEventListener("pointerdown", event => {
+    if (!show3D || event.button !== 0) return;
+    stagePointer = { id: event.pointerId, x: event.clientX, y: event.clientY, at: performance.now(), moved: false };
+    greetAt = null;
+    preview3D?.setPointer(null);
+  });
+  window.addEventListener("pointermove", event => {
+    if (stagePointer?.id === event.pointerId && Math.hypot(
+      event.clientX - stagePointer.x, event.clientY - stagePointer.y
+    ) > 7) stagePointer.moved = true;
+  });
+  window.addEventListener("pointercancel", event => {
+    if (stagePointer?.id === event.pointerId) resetStagePointer();
+  });
+  window.addEventListener("pointerup", event => {
+    if (stagePointer?.id !== event.pointerId) return;
+    const isTap = !stagePointer.moved && performance.now() - stagePointer.at < 550;
+    stagePointer = null;
+    if (isTap) autoSound("curious-trill");
+  });
+
+  $("soundOptions").addEventListener("click", event => {
+    const button = event.target.closest("button[data-sound]");
+    if (button) void playSound(button);
+  });
+  soundPreview.addEventListener("ended", () => {
+    soundIsAutomatic = false;
+    soundGuardUntil = performance.now() + 160;
+    clearSound();
+  });
+  autoSounds.addEventListener("change", () => {
+    if (!autoSounds.checked) {
+      greetAt = null;
+      if (soundIsAutomatic) stopSound();
+      return;
+    }
+    if (autoSound("hello")) lastApproach = performance.now();
+  });
+  els.bodyAnim.addEventListener("click", event => {
+    const motion = event.target.closest("button")?.dataset.value;
+    if (motion === "sleep") autoSound("sleepy-hum");
+    if (motion === "excited" || motion === "jump") autoSound("bright-chirp");
+  });
   els.miniSize.addEventListener("input", () => { lastFrame = -1; }); // redraw the scaled preview
   els.genWall.addEventListener("click", () => generateWall());
+  $("wallPrevious").addEventListener("click", () => { wallPage--; showWallPage(); });
+  $("wallNext").addEventListener("click", () => { wallPage++; showWallPage(); });
+  compactWall.addEventListener("change", showWallPage);
+  menuBar.addEventListener("click", event => {
+    const button = event.target.closest("button");
+    if (button) setMenu(button === activeMenu ? null : button);
+  });
+  document.addEventListener("pointerdown", event => {
+    if (activeMenu && !menuBar.contains(event.target) &&
+        !$(activeMenu.getAttribute("aria-controls")).contains(event.target)) setMenu(null);
+  });
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape" && activeMenu) {
+      activeMenu.focus();
+      setMenu(null);
+    }
+  });
+  const micButton = $("micToggle");
+  const micStatus = $("micStatus");
+  const micLevel = $("micLevel");
+  const micBrowserLink = $("micBrowserLink");
+  let micSession = null;
+  let listening = false;
+
+  function showMicHelp(message) {
+    micStatus.textContent = message;
+    micBrowserLink.href = location.href;
+    micBrowserLink.hidden = false;
+  }
+
+  function setListening(active, time = null) {
+    if (listening === active) return;
+    listening = active;
+    micButton.dataset.listening = String(active);
+    micStatus.textContent = active ? "Listening to you…" : "Mic on. Speak to get their attention.";
+    if (active) voiceStartedAt = time;
+    else {
+      if (time !== null && voiceStartedAt !== null && micSession.lastVoice - voiceStartedAt >= 420) {
+        autoSound("soft-beeps", time);
+      }
+      voiceStartedAt = null;
+    }
+  }
+
+  function stopMic(message = "") {
+    const session = micSession;
+    micSession = null;
+    clearTimeout(session?.hintTimer);
+    session?.stream?.getTracks().forEach(track => track.stop());
+    session?.source?.disconnect();
+    session?.context?.close().catch(() => {});
+    listening = false;
+    voiceStartedAt = null;
+    micButton.setAttribute("aria-pressed", "false");
+    micButton.dataset.listening = "false";
+    micLevel.hidden = true;
+    micLevel.value = 0;
+    micBrowserLink.hidden = true;
+    micStatus.textContent = message;
+  }
+
+  async function startMic() {
+    if (micSession) { stopMic(); return; }
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext || !navigator.mediaDevices?.getUserMedia) {
+      showMicHelp("Microphone access is unavailable here. Try localhost or HTTPS in your browser.");
+      return;
+    }
+    const session = { lastVoice: -Infinity, onset: null, noiseFloor: 0.0015 };
+    micSession = session;
+    micButton.setAttribute("aria-pressed", "true");
+    micBrowserLink.hidden = true;
+    micStatus.textContent = "Allow microphone access when your browser asks.";
+    session.hintTimer = setTimeout(() => {
+      if (micSession === session) showMicHelp(session.stream
+        ? "The microphone connected, but audio input is paused. Turn Mic off and try again."
+        : "No permission prompt? Open this page in Chrome or Safari and try Mic there.");
+    }, 6000);
+    try {
+      // Unlock Web Audio while the click is still active, before the permission prompt.
+      const context = session.context = new AudioContext();
+      const resume = context.resume().then(() => true, () => false);
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        video: false,
+      });
+      if (micSession !== session) {
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
+      session.stream = stream;
+      for (const track of stream.getAudioTracks()) track.addEventListener("ended", () => {
+        if (micSession === session) stopMic("The microphone disconnected.");
+      });
+      const source = session.source = context.createMediaStreamSource(stream);
+      const analyser = session.analyser = context.createAnalyser();
+      analyser.fftSize = 2048;
+      session.samples = new Float32Array(analyser.fftSize);
+      // Read the signal without connecting it to the speakers.
+      source.connect(analyser);
+      if (!await resume) throw Error("Could not resume audio input");
+      if (micSession !== session) return;
+      clearTimeout(session.hintTimer);
+      micBrowserLink.hidden = true;
+      micLevel.hidden = false;
+      micStatus.textContent = "Mic on. Speak to get their attention.";
+    } catch (error) {
+      if (micSession !== session) return;
+      stopMic();
+      if (error.name === "NotAllowedError" || error.name === "SecurityError") {
+        showMicHelp("Microphone permission was denied. Check your browser and macOS microphone permissions.");
+      } else if (error.name === "NotFoundError") {
+        micStatus.textContent = "No microphone found. Check your selected input device.";
+      } else {
+        showMicHelp("The microphone couldn’t start. Check your input device and try again.");
+      }
+    }
+  }
+
+  function sampleMic(time) {
+    const session = micSession;
+    if (session?.context?.state !== "running" || !session.samples) {
+      setListening(false);
+      return false;
+    }
+    session.analyser.getFloatTimeDomainData(session.samples);
+    let energy = 0;
+    for (const value of session.samples) energy += value * value;
+    const volume = Math.sqrt(energy / session.samples.length);
+    const db = 20 * Math.log10(Math.max(0.0001, volume));
+    micLevel.value = Math.max(0, Math.min(1, (db + 62) / 46));
+    // Prevent the critter from treating its own speakers as a new conversation.
+    if (!listening && (!soundPreview.paused || time < soundGuardUntil)) {
+      session.onset = null;
+      return false;
+    }
+    const threshold = listening ? Math.max(0.0025, session.noiseFloor * 1.7)
+      : Math.max(0.0045, session.noiseFloor * 2.5);
+    if (volume > threshold) {
+      session.onset ??= time;
+      if (listening || time - session.onset >= 54) session.lastVoice = time;
+    } else {
+      session.onset = null;
+      if (!listening) session.noiseFloor += (volume - session.noiseFloor) * 0.02;
+    }
+    setListening(time - session.lastVoice < 500, time);
+    return listening;
+  }
+
+  micButton.addEventListener("click", startMic);
+  window.addEventListener("pagehide", () => { stopMic(); stopSound(); });
+  $("viewPixel").addEventListener("click", () => setPreviewMode(false));
+  $("view3D").addEventListener("click", () => setPreviewMode(true));
+  $("resetOrbit").addEventListener("click", () => preview3D?.resetView());
+  scaleInput.addEventListener("input", () => {
+    scaleValue.value = scaleInput.value + "%";
+    preview3D?.setPreviewScale(Number(scaleInput.value) / 100);
+    updateURL();
+  });
+  for (const button of starterButtons) {
+    button.addEventListener("click", () => { setSeedAndRegen(button.dataset.seed); render(); });
+  }
 
   /* ---- video cast (named critters persisted to localStorage) ---------- */
   const CAST_KEY = "sycritters-video-cast";
@@ -1975,7 +2651,7 @@ const cv = document.getElementById("sy");
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Sycritters — Video Cast</title>
 <style>
-  body { margin: 0; font-family: ui-monospace, "DM Mono", monospace; font-size: 13px; color: #1a1a1a; background: #fff; padding: 32px 28px; }
+  body { margin: 0; font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; color: #1a1a1a; background: #fff; padding: 32px 28px; }
   h1 { font-size: 16px; letter-spacing: 2px; text-transform: uppercase; margin: 0 0 6px; }
   h1 b { color: #ff3e00; }
   .hint { color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 28px; }
@@ -2074,6 +2750,7 @@ for (const m of CAST) {
   generateWall();
   renderCast();
   render();
+  if (show3D) setPreviewMode(true, false);
   requestAnimationFrame(loop);
 
   // Run engine invariant checks from the browser via index.html?test
