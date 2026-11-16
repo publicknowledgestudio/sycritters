@@ -19,14 +19,37 @@ python3 -m http.server 4173 --bind 127.0.0.1
   hit 🎲 for a random one, or **Surprise me**.
 - **The Wall.** Generate a grid of random critters and select one to edit.
   In 3D mode the tiles are still renders.
+- **Curated collection.** Select **Curated** beside Pixel and 3D for eleven
+  handcrafted solids. Brass, Ember, and Minty follow the supplied sprite
+  templates. Loaf, Barrel, Wedge, Boulder, Cross, Duo, Step, and Cushion are
+  large, simple bodies with broad faces and substantial depth. Their default
+  paint uses a three-color radial gradient in the front two voxel layers only.
+  Each voxel has the same color on every face. All deeper layers use the
+  gradient’s outermost color. All 3D critter bodies use flat paint without
+  lighting shadows, including the regular generator and gallery thumbnails. Scroll sideways
+  to see them all. Colors, eyes, accessories, motions, and petting work here
+  too. Shape controls stay in the generator modes. Share links preserve the
+  selected creature; switching modes restores your generated critter.
 - **Explore in 3D.** Switch the editor to **3D** and try **Agent**, **Dome**, or
   **Slant**. Drag the preview or focus it and use the arrow keys to orbit.
-  The main critter follows the cursor with its eyes and body between motions.
-  Top, Middle, and Bottom keep their pixel silhouettes and use up to four
-  layers of voxels. Ears and domes taper, waist cuts wrap around the sides,
-  and feet can sit at different depths.
-  Select **Solid** for one body color. Pick an eye shape under **Eyes**, or add
-  a bow tie, headphones, crown, star pin, or scarf under **Accessories**.
+  The main critter follows the cursor with its eyes and body. Hover for a
+  gloved-hand cursor; click the critter for two gentle petting strokes and a
+  contented squint. With Auto sounds enabled it can purr. Dragging still orbits.
+  **Top → Volume** chooses a solid Orb, Bean, Pear, Capsule, Pebble, or Block.
+  **From seed** picks a repeatable form automatically. Models are sampled in
+  three dimensions on an 8×8×8 grid, with curved backs, depth-aware waist cuts,
+  solid top features, and feet spread across the ground plane. Gallery tiles
+  and shape thumbnails use the same volumes. Pixel generation stays unchanged.
+  A selected volume is included in 3D share links.
+  Select **Solid** for one body color. **Eyes → Cartoon** adds tall cream eyes,
+  pie-cut pupils, and little glints inspired by classic cartoons. **Outlined**,
+  **Lashed**, and **Arched** reproduce the illustrated eye reference with ink
+  rims, curled lashes, or floating upper arches and glossy pupils. Pick an eye
+  **Square pixel** duplicates Pixel eyes with sharp corners and the same
+  dot/bar pupil controls. Pick a shape under **Eyes**, or add
+  a bow tie, round or square glasses, headphones, crown, star pin, or scarf
+  under **Accessories**. A baseball cap, beret, flower crown, monocle, and
+  backpack are also available; orbit behind the critter to see the backpack.
   Switch between **Pixel** and **3D** to watch the sprite gain depth and turn.
   The **24 px** avatar shares the full preview's expression and idle breathing.
   **Scale** changes the main preview without resizing the avatar.
@@ -37,6 +60,11 @@ python3 -m http.server 4173 --bind 127.0.0.1
   doesn't show a permission prompt, open the same page in your regular browser.
   The page checks input volume locally and does not record or send audio.
   Click **Mic** again to turn it off.
+  With **Spoken replies** enabled, speaking and pausing for about a second
+  prompts a short voiced phrase, such as “Tell me more!” Bundled audio works
+  without system speech voices. These are preset responses to a pause; the
+  critter does not transcribe or interpret your words. **Hear a reply** previews
+  one without a microphone.
   Short pauses hold attention, then prompt a small nod; longer pauses become
   curious waiting. During extended quiet, the critter alternates gentle glances,
   blinks, bobs, thoughtful tilts, and floating rests. A steady sustained sound
@@ -54,7 +82,16 @@ python3 -m http.server 4173 --bind 127.0.0.1
   gaze (parallel or **mirrored**, pupils pointing inward/outward together), a 1
   or 2 px gap, and alignment. Touching one control changes only that axis
   (lock-an-axis).
-- **Animate it.** A single unified motion table drives both the live **Motion**
+- **Capture a 3D PNG.** Open **Share → PNG · 3 sec** in 3D or Curated mode.
+  A three-second countdown lets you pose the critter before the current view
+  downloads as a transparent PNG, including its eyes, accessories, and outline.
+- **3D block animations.** The 3D **Motion** menu has seven independent clips:
+  Ripple, Explode & reassemble, Block shuffle, Telescoping peek, Stepping blocks,
+  Celebration burst, and Power-down stack. Blocks move from their original
+  positions each frame; selecting None restores the model. Pixel motions and
+  exports keep their existing controls and selection. Reduced motion disables
+  the clips.
+- **Animate pixels.** A single unified motion table drives both the live **Motion**
   control and the export cycles, so they can never drift apart. Beyond the agent
   states (thinking / scanning / processing / bob / wants attention / celebrate)
   it includes **push wall** (lean into a wall in any of four directions, with
@@ -62,7 +99,7 @@ python3 -m http.server 4173 --bind 127.0.0.1
   **sad**, and **excited**. Body and eye states use stepped pixel-art timing;
   scanning and processing use smoother highlight sweeps for a more product-ready
   agent feel. A size-adjustable **mini preview** shows the critter scaled down.
-- **Preview sounds.** Open **Motion → Sounds** to play any of the five cues,
+- **Preview sounds.** Open **Motion → Sounds** to play any of the eleven cues,
   including the soft beeps and bright chirp from *One Slide at a Time*. In 3D,
   **Auto sounds** adds a greeting on approach, a trill on tap, a soft beep
   after you speak, and one cue when you select Sleep or Excited. The critter

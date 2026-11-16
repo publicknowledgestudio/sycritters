@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+ <defs>
+  <linearGradient id="glove" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff"/><stop offset=".55" stop-color="#f5f6fa"/><stop offset="1" stop-color="#a4acc0"/></linearGradient>
+  <linearGradient id="cuff" x2="0" y2="1"><stop stop-color="#fff"/><stop offset="1" stop-color="#9ba6ba"/></linearGradient>
+ </defs>
+ <path d="M17 43c-1-5-2-7-5-11l-6-8c-3-5 2-8 5-5l5 5V8c0-6 8-6 8 0v10c1-5 7-4 7 0v2c2-4 7-2 7 2v2c3-2 7 0 6 5l-2 8-4 7Z" fill="#182035" opacity=".18" transform="translate(1 2)"/>
+ <path d="m15 38-4-8-6-8c-2-4 2-7 5-4l6 6V7c0-6 8-6 8 0v12c0-6 7-6 7-1v3c0-5 7-5 7 0v4c1-5 7-4 6 1l-2 9-5 7Z" fill="url(#glove)" stroke="#30394d" stroke-width="1.8" stroke-linejoin="round"/>
+ <path d="M24 19v7m7-5v6m7-2-1 4M17 28c5-1 9 1 10 5" fill="none" stroke="#929bad" stroke-width="1.5" stroke-linecap="round"/>
+ <path d="m15 36 23 3-1 7-23-3Z" fill="url(#cuff)" stroke="#30394d" stroke-width="1.8" stroke-linejoin="round"/>
+ <path d="m18 39 15 2" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+</svg>
