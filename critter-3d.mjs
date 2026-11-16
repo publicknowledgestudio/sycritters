@@ -8,6 +8,9 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { SVGLoader } from "three/addons/loaders/SVGLoader.js";
+import { nativeVolume, VOLUME_LAYERS, VOLUME_ORIGIN } from "./critter-volume.mjs";
+import { petPose } from "./critter-petting.mjs";
+import { blockMotion3D, blockPose3D } from "./critter-block-motion.mjs";
 import { motionPose3D } from "./critter-motion.mjs";
 import { SpeechAttention } from "./critter-attention.mjs";
 
@@ -17,89 +20,6 @@ const BODY_FRONT = BODY_LAYERS / 2;
 const OUTLINE_ROUNDING = 0.5;
 const GLOW = 0.5;
 const OUTLINE_RADIUS = OUTLINE_ROUNDING * 0.48;
-
-// Masks run from back to front. 0b0110 is the middle two layers.
-const FULL = 0b1111;
-const CORE = 0b0110;
-const BACK = 0b0011;
-const FRONT = 0b1100;
-const NEAR_FRONT = 0b1110;
-const NEAR_BACK = 0b0111;
-const CENTER = 0b0100;
-
-const TOP_DEPTH = {
-  dome: [CORE, NEAR_FRONT, FULL, FULL],
-  flat: [FULL, FULL, FULL, FULL],
-  notch: [CORE, FULL, FULL, FULL],
-  ears: [CORE, CORE, FULL, FULL],
-  antennae: [CENTER, CORE, FULL, FULL],
-  loaf: [NEAR_FRONT, FULL, FULL, FULL],
-  crown: [FRONT, FULL, FULL, FULL],
-  w: [BACK, NEAR_BACK, FULL, FULL],
-  trident: [FRONT, FULL, FULL, FULL],
-  dots: [CORE, NEAR_FRONT, FULL, FULL],
-  handle: [CORE, CORE, FULL, FULL],
-  lego: [CORE, FULL, FULL, FULL],
-  "tail-l": [NEAR_BACK, FULL, FULL, FULL],
-  "tail-r": [NEAR_BACK, FULL, FULL, FULL],
-  "2tl": [NEAR_FRONT, FULL, FULL, FULL],
-  "2tr": [NEAR_FRONT, FULL, FULL, FULL],
-  "3tl": [CORE, NEAR_FRONT, FULL, FULL],
-  "3tr": [CORE, NEAR_FRONT, FULL, FULL],
-};
-
-const BOTTOM_DEPTH = {
-  flat: [FULL, FULL, FULL, FULL],
-  round: [FULL, FULL, NEAR_FRONT, CORE],
-  legs: [FULL, FULL, FULL, CORE],
-  splayed: [FULL, FULL, FULL, NEAR_FRONT],
-  tripod: [FULL, FULL, FULL, FRONT],
-  tripod2: [FULL, FULL, CORE, FRONT],
-  toes: [FULL, FULL, FULL, FRONT],
-  "toes-a": [FULL, FULL, FULL, FRONT],
-  "toes-b": [FULL, FULL, FULL, BACK],
-  dots: [FULL, FULL, NEAR_BACK, CORE],
-  "2bl": [FULL, FULL, FULL, NEAR_BACK],
-  "2br": [FULL, FULL, FULL, NEAR_BACK],
-  "3bl": [FULL, FULL, NEAR_BACK, CORE],
-  "3br": [FULL, FULL, NEAR_BACK, CORE],
-};
-
-function topDepth(shape, row, column) {
-  if (row === 0) {
-    if (shape === "dots" && (column === 0 || column === 7)) return CENTER;
-    if (shape === "trident" && (column === 3 || column === 4)) return BACK;
-    if (shape === "crown" && column > 0 && column < 7) return CORE;
-    if ((shape === "tail-l" && column === 0) || (shape === "tail-r" && column === 7)) return CENTER;
-  }
-  return TOP_DEPTH[shape][row];
-}
-
-function bottomDepth(shape, row, column) {
-  if (row === 7) {
-    const center = column === 3 || column === 4;
-    if (shape.startsWith("tripod") && center) return BACK;
-    if (shape === "toes" && center) return BACK;
-    if (shape === "dots" && !center) return CENTER;
-    if (shape === "toes-a") return column % 4 === 0 ? FRONT : BACK;
-    if (shape === "toes-b") return column % 4 === 1 ? BACK : FRONT;
-  }
-  return BOTTOM_DEPTH[shape][row - 4];
-}
-
-function middleDepth(shape, column) {
-  if (shape === "pinch" && (column === 1 || column === 6)) return CORE;
-  if (shape === "narrow" && (column === 2 || column === 5)) return CORE;
-  if ((shape === "bite-l" && column === 1) || (shape === "bite-r" && column === 6)) return NEAR_BACK;
-  return FULL;
-}
-
-function bodyDepth(spec, grid, row, column) {
-  // Keep a front face behind the eyes, including while they blink.
-  if (grid[row][column] >= 2) return FULL;
-  const depth = row < 4 ? topDepth(spec.top, row, column) : bottomDepth(spec.bottom, row, column);
-  return row === 3 || row === 4 ? depth & middleDepth(spec.waist, column) : depth;
-}
 
 function silhouettePass(operation, output) {
   return new ShaderPass({
@@ -131,7 +51,7 @@ function silhouettePass(operation, output) {
   });
 }
 
-function placeVoxels(mesh, grid, depthAt) {
+function placeVoxels(mesh, grid, depthAt, layers = BODY_LAYERS, origin = BODY_FRONT) {
   const matrix = new THREE.Matrix4();
   const cells = [];
   for (let row = 0; row < SIZE; row++) {
@@ -140,9 +60,9 @@ function placeVoxels(mesh, grid, depthAt) {
       const x = column + 0.5 - SIZE / 2;
       const y = SIZE - row - 0.5;
       const depth = depthAt(row, column);
-      for (let layer = 0; layer < BODY_LAYERS; layer++) {
+      for (let layer = 0; layer < layers; layer++) {
         if (!(depth & (1 << layer))) continue;
-        mesh.setMatrixAt(cells.length, matrix.makeTranslation(x, y, layer + 0.5 - BODY_FRONT));
+        mesh.setMatrixAt(cells.length, matrix.makeTranslation(x, y, layer + 0.5 - origin));
         cells.push(row * SIZE + column);
       }
     }
@@ -175,7 +95,75 @@ function almondGeometry() {
   return new THREE.ShapeGeometry(shape, 20);
 }
 
+// A pie-cut pupil gives the graphic, early-cartoon expression in the reference.
+function cartoonPupilGeometry() {
+  const shape = new THREE.Shape();
+  for (let i = 0; i <= 56; i++) {
+    const angle = (155 + i / 56 * 315) * Math.PI / 180;
+    const x = Math.cos(angle) * 0.51, y = Math.sin(angle) * 0.78;
+    if (i === 0) shape.moveTo(x, y); else shape.lineTo(x, y);
+  }
+  shape.lineTo(-0.03, 0.15);
+  shape.closePath();
+  return new THREE.ShapeGeometry(shape);
+}
+
+function eyeRingGeometry() {
+  const outline = new THREE.Shape();
+  outline.absellipse(0, 0, 0.89, 1.12, 0, Math.PI * 2, false);
+  const hole = new THREE.Path();
+  hole.absellipse(0, 0, 0.76, 0.99, 0, Math.PI * 2, true);
+  outline.holes.push(hole);
+  return new THREE.ShapeGeometry(outline, 48);
+}
+function lashedEyeGeometry() {
+  const shape = new THREE.Shape();
+  shape.moveTo(-0.78, -0.87);
+  shape.bezierCurveTo(-0.82, 0.2, -0.57, 1.12, 0, 1.12);
+  shape.bezierCurveTo(0.57, 1.12, 0.82, 0.2, 0.78, -0.87);
+  shape.quadraticCurveTo(0, -0.61, -0.78, -0.87);
+  return new THREE.ShapeGeometry(shape, 32);
+}
+function decorateIllustratedEye(style, opening, pupil, dark, white) {
+  const details = new THREE.Group();
+  opening.add(details);
+  const stroke = (points, radius = 0.065) => {
+    const curve = new THREE.CatmullRomCurve3(points.map(([x, y]) => new THREE.Vector3(x, y, 0.012)));
+    const mesh = new THREE.Mesh(new THREE.TubeGeometry(curve, 48, radius, 8, false), dark);
+    details.add(mesh);
+    // Round the ends of the drawn strokes.
+    for (const point of [curve.getPoint(0), curve.getPoint(1)]) {
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(radius, 12, 8), dark);
+      cap.position.copy(point);
+      details.add(cap);
+    }
+  };
+  if (style === "outlined") {
+    const rim = new THREE.Mesh(eyeRingGeometry(), dark);
+    rim.position.z = 0.008;
+    details.add(rim);
+  }
+  if (style === "lashed") {
+    stroke([[-0.78,-0.87],[-0.76,0.25],[-0.49,0.95],[0,1.12],[0.49,0.95],[0.76,0.25],[0.78,-0.87]]);
+    stroke([[-0.85,-0.93],[-0.4,-0.78],[0,-0.74],[0.4,-0.78],[0.85,-0.93]]);
+    stroke([[-0.56,0.75],[-0.85,0.82],[-1,1.08]], 0.075);
+  }
+  if (style === "arched") stroke([[-0.93,0.26],[-0.7,0.92],[0,1.32],[0.7,0.92],[0.93,0.26]], 0.075);
+  const glints = style === "lashed" ? [[-0.22,0.48,0.23],[-0.35,0.29,0.1]]
+    : style === "outlined" ? [[0.18,0.42,0.13]] : [[0.17,0.43,0.19],[0.34,0.14,0.08]];
+  for (const [x,y,radius] of glints) {
+    const glint = new THREE.Mesh(new THREE.CircleGeometry(radius,32),white);
+    glint.position.set(x,y,0.018);
+    pupil.add(glint);
+  }
+  return details;
+}
+
 const VECTOR_EYES = {
+  outlined: { opening: [0.79, 1.02], pupil: [0.54, 0.78], travel: [0.1, 0.1] },
+  lashed: { sclera: lashedEyeGeometry, pupil: [0.54, 0.86], travel: [0.08, 0.08], bias: [0.1, -0.08] },
+  arched: { sclera: () => new THREE.BufferGeometry(), pupil: [0.62, 0.91], travel: [0.12, 0.1], bias: [0, -0.17] },
+  cartoon: { opening: [0.8, 1.08], pupil: [0.51, 0.78], travel: [0.14, 0.14] },
   round: { pupil: [0.51, 0.51], travel: [0.31, 0.31] },
   oval: { opening: [0.77, 0.97], pupil: [0.44, 0.54], travel: [0.23, 0.31] },
   "soft-square": { sclera: () => eyeGeometry(1.94, 1.94, 0.48), pupil: [0.51, 0.51], travel: [0.31, 0.31] },
@@ -208,15 +196,15 @@ function makeEyes(grid, spec, style = "round") {
   const row = grid.findIndex(row => row.some(cell => cell >= 2));
   const left = grid[row].findIndex(cell => cell >= 2);
   const eyes = [left, left + 2 + spec.eyes.gap];
-  const pixel = style === "pixel";
+  const pixel = style === "pixel" || style === "pixel-square";
   const bar = pixel && spec.eyes.pupil === "bar";
-  const white = pixel ? null : new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const white = pixel ? null : new THREE.MeshBasicMaterial({ color: style === "cartoon" ? 0xffffe9 : 0xffffff });
   const dark = new THREE.MeshBasicMaterial({ color: 0x000000 });
   const vector = VECTOR_EYES[style] ?? VECTOR_EYES.round;
-  const scleraGeometry = pixel ? eyeGeometry(2, 2, OUTLINE_RADIUS)
+  const scleraGeometry = pixel ? (style === "pixel-square" ? new THREE.PlaneGeometry(2, 2) : eyeGeometry(2, 2, OUTLINE_RADIUS))
     : vector.sclera?.() ?? ellipse(vector.opening ?? [0.97, 0.97]);
   const pupilGeometry = pixel ? new THREE.PlaneGeometry(1, 2)
-    : ellipse(vector.pupil);
+    : style === "cartoon" ? cartoonPupilGeometry() : ellipse(vector.pupil);
   return eyes.map((column, index) => {
     const opening = new THREE.Group();
     // Draw the square pupil on the rounded face itself, so its corners are clipped
@@ -226,9 +214,18 @@ function makeEyes(grid, spec, style = "round") {
     const pupil = new THREE.Mesh(pupilGeometry, dark);
     pupil.position.z = 0.004;
     opening.add(sclera, pupil);
+    if (style === "cartoon") {
+      for (const [x, y, radius] of [[0.16, 0.25, 0.115], [0.07, -0.03, 0.055]]) {
+        const glint = new THREE.Mesh(new THREE.CircleGeometry(radius, 24), white);
+        glint.position.set(x, y, 0.004);
+        pupil.add(glint);
+      }
+    }
+    const details = ["outlined", "lashed", "arched"].includes(style)
+      ? decorateIllustratedEye(style, opening, pupil, dark, white) : null;
     const x = column + 1 - SIZE / 2, y = SIZE - row - 1;
     opening.position.set(x, y, BODY_FRONT + 0.004);
-    return { opening, sclera, pupil, center, bar, pixel, travel: vector.travel, mirror: index === 1 && spec.eyes.mirror };
+    return { opening, sclera, pupil, details, center, bar, pixel, bias: vector.bias ?? [0, 0], travel: vector.travel, mirror: index === 1 && spec.eyes.mirror };
   });
 }
 
@@ -237,10 +234,10 @@ function disposeEyes(eyes) {
   const geometries = new Set();
   for (const { opening } of eyes) {
     opening.removeFromParent();
-    for (const mesh of opening.children) {
-      geometries.add(mesh.geometry);
-      materials.add(mesh.material);
-    }
+    opening.traverse(mesh => {
+      if (mesh.geometry) geometries.add(mesh.geometry);
+      if (mesh.material) materials.add(mesh.material);
+    });
   }
   for (const material of materials) material.dispose();
   for (const geometry of geometries) geometry.dispose();
@@ -250,12 +247,38 @@ function pupilPosition(eye, x, y) {
   const horizontal = eye.mirror ? -x : x;
   if (eye.pixel) return { x: horizontal * 0.5, y: eye.bar ? 0 : y * 0.5 };
   const length = Math.max(1, Math.hypot(horizontal, y));
-  return { x: horizontal * eye.travel[0] / length, y: y * eye.travel[1] / length };
+  return { x: horizontal * eye.travel[0] / length + eye.bias[0], y: y * eye.travel[1] / length + eye.bias[1] };
+}
+
+function squareGlassesGeometry() {
+  const rounded = (path, half, radius) => {
+    path.moveTo(-half + radius, -half);
+    path.lineTo(half - radius, -half);
+    path.quadraticCurveTo(half, -half, half, -half + radius);
+    path.lineTo(half, half - radius);
+    path.quadraticCurveTo(half, half, half - radius, half);
+    path.lineTo(-half + radius, half);
+    path.quadraticCurveTo(-half, half, -half, half - radius);
+    path.lineTo(-half, -half + radius);
+    path.quadraticCurveTo(-half, -half, -half + radius, -half);
+    path.closePath();
+  };
+  const frame = new THREE.Shape();
+  rounded(frame, 1.58, 0.34);
+  const lens = new THREE.Path();
+  rounded(lens, 1.37, 0.18);
+  frame.holes.push(lens);
+  const geometry = new THREE.ExtrudeGeometry(frame, {
+    depth: 0.2, bevelEnabled: true, bevelThickness: 0.035,
+    bevelSize: 0.035, bevelSegments: 2, curveSegments: 10, steps: 1,
+  });
+  geometry.translate(0, 0, -0.1);
+  return geometry;
 }
 
 function makeAccessory(option) {
   const group = new THREE.Group();
-  if (["top-hat", "round-glasses", "headphones", "crown", "scarf"].includes(option.value)) {
+  if (["top-hat", "round-glasses", "square-glasses", "headphones", "crown", "scarf", "baseball-cap", "beret", "flower-crown", "monocle", "backpack"].includes(option.value)) {
     const black = new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 0.8 });
     const white = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 });
     const add = (geometry, material, x, y, z) => {
@@ -264,7 +287,58 @@ function makeAccessory(option) {
       group.add(mesh);
       return mesh;
     };
-    if (option.value === "crown") {
+    if (option.value === "baseball-cap") {
+      const blue = new THREE.MeshStandardMaterial({color: 0x3965d8, roughness: 0.85});
+      add(new THREE.SphereGeometry(2.25, 32, 16, 0, Math.PI*2, 0, Math.PI/2), blue, 0, -0.4, -2.035);
+      const brim = add(new THREE.SphereGeometry(1.8, 32, 12), blue, 0, -0.35, -0.1);
+      brim.scale.set(1.15, 0.07, 0.9);
+      add(new THREE.SphereGeometry(0.18, 16, 12), white, 0, 1.87, -2.035);
+      const patch = add(new THREE.CircleGeometry(.45, 24), white, 0, .45, .23);
+      patch.rotation.x = -0.25;
+    } else if (option.value === "beret") {
+      const red = new THREE.MeshStandardMaterial({color: 0xa92e42, roughness: 0.95});
+      add(new THREE.CylinderGeometry(1.7, 1.7, .25, 32), black, 0, -.35, -2.035);
+      const cap = add(new THREE.SphereGeometry(2.1, 32, 16), red, -.3, .05, -2.035);
+      cap.scale.set(1.12, .32, 1);
+      cap.rotation.z = -.14;
+      add(new THREE.CylinderGeometry(.12, .15, .45, 12), red, -.55, .85, -2.035);
+    } else if (option.value === "flower-crown") {
+      const green = new THREE.MeshStandardMaterial({color: 0x3b8054, roughness: .9});
+      const pink = new THREE.MeshStandardMaterial({color: 0xffa9c7, roughness: .8});
+      const gold = new THREE.MeshStandardMaterial({color: 0xffbb33, roughness: .7});
+      const band = add(new THREE.TorusGeometry(2.1, .13, 8, 40), green, 0, -.35, -2.035);
+      band.rotation.x = Math.PI/2;
+      for (let i=0;i<5;i++) {
+        const angle = (i-2)*.55;
+        const x=Math.sin(angle)*2.1, z=-2.035+Math.cos(angle)*2.1;
+        for(let j=0;j<5;j++) {
+          const a=j*Math.PI*2/5;
+          const petal=add(new THREE.SphereGeometry(.32, 12, 10), i%2 ? pink : white,
+            x+Math.cos(a)*.36, -.05+Math.sin(a)*.36, z+.05);
+          petal.scale.z=.4;
+        }
+        add(new THREE.SphereGeometry(.22,16,12), gold, x,-.05,z+.18);
+      }
+    } else if (option.value === "monocle") {
+      const brass = new THREE.MeshStandardMaterial({color: 0xba873b, metalness: .65, roughness: .3});
+      add(new THREE.TorusGeometry(1.27,.1,10,48), brass, 0,0,.25);
+      const chain=new THREE.CatmullRomCurve3([[1.2,-.25,.25],[1.55,-1,.3],[1.45,-2,.3],[.8,-2.7,.35],[.3,-2.5,.35]].map(p=>new THREE.Vector3(...p)));
+      add(new THREE.TubeGeometry(chain,36,.045,6,false),brass,0,0,0);
+    } else if (option.value === "backpack") {
+      const leather = new THREE.MeshStandardMaterial({color: 0xb56c3e, roughness: .9});
+      const tan = new THREE.MeshStandardMaterial({color: 0xe8c28b, roughness: .85});
+      const pack=add(new THREE.CapsuleGeometry(1.4,1.4,6,24),leather,0,0,-.25);
+      pack.scale.set(1,.95,.6);
+      add(new THREE.BoxGeometry(2,1.3,.4),tan,0,-.5,-1.05);
+      add(new THREE.BoxGeometry(.35,.55,.1),black,0,.15,-1.3);
+      const handle=new THREE.CatmullRomCurve3([[-.6,1.4,0],[-.55,2.2,0],[.55,2.2,0],[.6,1.4,0]].map(p=>new THREE.Vector3(...p)));
+      add(new THREE.TubeGeometry(handle,24,.12,8,false),tan,0,0,0);
+      for(const side of [-1,1]) {
+        const strap=add(new THREE.TorusGeometry(1.8,.13,8,32),tan,side*1.1,0,1.1);
+        strap.rotation.y=Math.PI/2;
+        strap.scale.y=1.2;
+      }
+    } else if (option.value === "crown") {
       const profile = [
         new THREE.Vector2(1.3, -0.45), new THREE.Vector2(1.6, -0.45),
         new THREE.Vector2(1.6, 0.25), new THREE.Vector2(1.3, 0.25),
@@ -308,7 +382,8 @@ function makeAccessory(option) {
       add(new THREE.CylinderGeometry(1.43, 1.45, 0.32, 32), white, 0, -0.05, -2.035);
     } else {
       for (const x of [-1.45, 1.45]) {
-        const rim = add(new THREE.TorusGeometry(1.58, 0.12, 8, 40), black, x, 0, 0.24);
+        const geometry = option.value === "square-glasses" ? squareGlassesGeometry() : new THREE.TorusGeometry(1.58, 0.12, 8, 40);
+        const rim = add(geometry, black, x, 0, 0.24);
         rim.userData.glassesPart = "rim";
       }
       const bridge = add(new THREE.BoxGeometry(1, 0.18, 0.18), black, 0, 0.25, 0.24);
@@ -437,23 +512,31 @@ export function createStage(host, avatar, shapePreviews, rasterize, restPaint) {
   // Retain the rendered silhouette before rounding: thin accessories outside
   // the body must survive the erosion used to soften voxel corners.
   const original = new SavePass(new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType }));
+  const accessoryMask = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType });
   const preserveAccessory = new ShaderPass({
     uniforms: {
       tDiffuse: { value: null },
-      original: { value: original.renderTarget.texture },
+      original: { value: null },
+      accessoryMask: { value: null },
     },
     vertexShader: `varying vec2 vUv;
       void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
     fragmentShader: `uniform sampler2D tDiffuse;
       uniform sampler2D original;
+      uniform sampler2D accessoryMask;
       varying vec2 vUv;
       void main() {
         vec4 rounded = texture2D(tDiffuse, vUv);
         vec4 source = texture2D(original, vUv);
-        gl_FragColor = source.a > rounded.a
+        float accessory = texture2D(accessoryMask, vUv).a;
+        gl_FragColor = accessory > 0.001 && source.a > rounded.a
           ? vec4(source.rgb * source.a, source.a) : rounded;
       }`,
   });
+  // ShaderPass clones supplied uniforms. Bind the live render-target texture
+  // afterward so the preservation pass samples the saved frame, not a clone.
+  preserveAccessory.uniforms.original.value = original.renderTarget.texture;
+  preserveAccessory.uniforms.accessoryMask.value = accessoryMask.texture;
   composer.addPass(original);
   composer.addPass(erode);
   composer.addPass(dilate);
@@ -464,38 +547,50 @@ export function createStage(host, avatar, shapePreviews, rasterize, restPaint) {
   const skin = new THREE.MeshStandardMaterial({
     roughness: 0.81, emissive: 0xffffff, emissiveIntensity: 0.2 + GLOW * 0.92,
   });
-  // Each cube emits its own body color on every side.
+  const frontOnly = form => form.startsWith("curated:") && !["curated:brass", "curated:minty"].includes(form);
+  // Instance paint belongs to the whole voxel, including its side faces.
   skin.onBeforeCompile = shader => {
     shader.fragmentShader = shader.fragmentShader.replace(
       "#include <emissivemap_fragment>",
       "#include <emissivemap_fragment>\ntotalEmissiveRadiance *= diffuseColor.rgb;"
     );
-    // Scale bright colors together so saturated channels retain their hue.
+    // Render every critter body with flat paint, independent of scene lighting.
     shader.fragmentShader = shader.fragmentShader.replace(
       "#include <opaque_fragment>",
-      "outgoingLight /= max(1.0, max3(outgoingLight));\n#include <opaque_fragment>"
+      "outgoingLight = diffuseColor.rgb;\n#include <opaque_fragment>"
     );
   };
   const critter = new THREE.Group();
   const cube = new THREE.BoxGeometry(1, 1, 1);
-  const body = new THREE.InstancedMesh(cube, skin, SIZE * SIZE * BODY_LAYERS);
+  const body = new THREE.InstancedMesh(cube, skin, SIZE * SIZE * VOLUME_LAYERS);
   body.count = 0;
   body.frustumCulled = false;
   critter.add(body);
   scene.add(critter);
 
   let spec, grid, basePaint, eyes = [];
+  let bodyForm = "seed", volume;
   let eyeShape = "round", motionName = "none", motionSince = null;
   let accessoryOption, accessoryMesh, previewScale = 1;
   let attention = 0, listeningSince = null, previousFrame = null;
   const speechAttention = new SpeechAttention();
-  let pointerTarget = null, pointerX = 0, pointerY = 0, pointerWeight = 0;
+  let pointerTarget = null, pointerX = 0, pointerY = 0, pointerWeight = 0, hoverWeight = 0;
+  let petSince = null;
+  const pointerRay = new THREE.Raycaster();
+  const pointerNDC = new THREE.Vector2();
   let silhouette = "", colors = "", dirty = true;
   let startedAt = null, breathingSince = null;
   let width = 0, height = 0;
+  let pendingCapture = null;
   let voxels = [];
+  let restVoxels = [];
+  const blockMatrix = new THREE.Matrix4();
+  const blockPosition = new THREE.Vector3();
+  const blockRotation = new THREE.Quaternion();
+  const blockAxis = new THREE.Vector3(0, 1, 0);
+  const blockScale = new THREE.Vector3(1, 1, 1);
   let shapePreviewsReady = false;
-  let pendingWall = null;
+  let pendingWall = null, wallTiles = [];
   const voxelColor = new THREE.Color();
   const motionPivot = new THREE.Vector3();
   const refresh = () => { dirty = true; };
@@ -556,8 +651,10 @@ export function createStage(host, avatar, shapePreviews, rasterize, restPaint) {
     disposeEyes(eyes);
     spec = next;
     basePaint = restPaint(spec);
-    grid = rasterize(spec);
+    volume = nativeVolume(spec, rasterize(spec), bodyForm);
+    grid = volume.grid;
     silhouette = "";
+    shapePreviewsReady = false;
     startedAt = null;
     breathingSince = null;
     eyes = makeEyes(grid, spec, eyeShape);
@@ -576,6 +673,7 @@ export function createStage(host, avatar, shapePreviews, rasterize, restPaint) {
   }
 
   function setWall(tiles) {
+    wallTiles = tiles;
     pendingWall = tiles;
   }
 
@@ -600,7 +698,15 @@ export function createStage(host, avatar, shapePreviews, rasterize, restPaint) {
     const y = accessoryOption.anchor === "eyes" ? eyeY : head ? SIZE - 1.60 : top ? SIZE - Math.max(0, crownRow) + 0.53 : chestY;
     const floatOffset = accessoryOption.value === "top-hat" ? 0.65 : 0;
     accessoryMesh.position.set(accessoryOption.anchor === "pin" ? pinX : 0, y + floatOffset, BODY_FRONT + 0.035);
-    if (accessoryOption.value === "round-glasses") {
+    if (accessoryOption.value === "monocle") accessoryMesh.position.x = eyes[1].opening.position.x;
+    if (accessoryOption.anchor === "back") {
+      let backLayer = VOLUME_LAYERS-1;
+      for(const mask of volume.masks.flat()) for(let layer=0;layer<backLayer;layer++) {
+        if(mask & (1<<layer)) { backLayer=layer; break; }
+      }
+      accessoryMesh.position.set(0, 3.5, backLayer-VOLUME_ORIGIN-.4);
+    }
+    if (["round-glasses", "square-glasses"].includes(accessoryOption.value)) {
       const left = eyes[0].opening.position.x;
       const right = eyes[1].opening.position.x;
       const center = (left + right) / 2;
@@ -651,18 +757,34 @@ export function createStage(host, avatar, shapePreviews, rasterize, restPaint) {
     const nextSilhouette = grid.map(row => row.map(cell => cell ? "1" : "0").join("")).join("");
     if (nextSilhouette !== silhouette) {
       silhouette = nextSilhouette;
-      voxels = placeVoxels(body, grid, (row, column) => bodyDepth(spec, grid, row, column));
+      voxels = placeVoxels(body, grid, (row, column) => volume.masks[row][column], VOLUME_LAYERS, VOLUME_ORIGIN);
+      restVoxels = voxels.map((cell, i) => {
+        body.getMatrixAt(i, blockMatrix);
+        const position = new THREE.Vector3().setFromMatrixPosition(blockMatrix);
+        return { position, face: grid[Math.floor(cell / SIZE)][cell % SIZE] >= 2 };
+      });
       colors = "";
     }
     const palette = grid.flatMap((row, y) => row.map((_, x) => basePaint(x, y)));
     const nextColors = palette.join("");
     if (colors === nextColors) return;
-    paintVoxels(body, voxels, palette);
+    paintVoxels(body, voxels, palette, spec, bodyForm);
     colors = nextColors;
   }
 
-  function paintVoxels(mesh, cells, palette) {
-    for (let i = 0; i < cells.length; i++) mesh.setColorAt(i, voxelColor.set(palette[cells[i]]));
+  function paintVoxels(mesh, cells, palette, paintSpec, form) {
+    const onlyFront = frontOnly(form);
+    const outer = paintSpec.colors.at(-1).hex;
+    for (let i = 0; i < cells.length; i++) {
+      // Use the two absolute front layers, not the front of each column:
+      // recessed surfaces deeper in the body must stay the outermost color.
+      mesh.getMatrixAt(i, blockMatrix);
+      const frontTwoLayers = blockMatrix.elements[14] >= VOLUME_LAYERS - 2 + 0.5 - VOLUME_ORIGIN;
+      const mintyHorn = form === "curated:minty" && (cells[i] === 0 || cells[i] === 7);
+      const cushionEdge = form === "curated:cushion" && [0, 7].includes(cells[i] % SIZE) && [1, 2, 5, 6].includes(Math.floor(cells[i] / SIZE));
+      const color = cushionEdge ? outer : mintyHorn ? paintSpec.colors[0].hex : onlyFront && !frontTwoLayers ? outer : palette[cells[i]];
+      mesh.setColorAt(i, voxelColor.set(color));
+    }
     mesh.instanceColor.needsUpdate = true;
   }
 
@@ -682,22 +804,23 @@ export function createStage(host, avatar, shapePreviews, rasterize, restPaint) {
   }
 
   function drawShapePreviews() {
+    if (bodyForm.startsWith("curated:")) { shapePreviewsReady = true; return; }
     const scene = new THREE.Scene();
     const camera = new THREE.OrthographicCamera(-5.3, 5.3, 5.3, -5.3, 0.1, 30);
     const light = new THREE.DirectionalLight(0xffffff, 1.55);
     light.position.set(-5, 7, 5);
     const geometry = new THREE.BoxGeometry(1, 1, 1);
     const material = new THREE.MeshLambertMaterial({ color: 0x729aa9 });
-    const mesh = new THREE.InstancedMesh(geometry, material, SIZE * SIZE * BODY_LAYERS);
+    const mesh = new THREE.InstancedMesh(geometry, material, SIZE * SIZE * VOLUME_LAYERS);
     mesh.frustumCulled = false;
     scene.add(mesh, light, new THREE.AmbientLight(0xffffff, 0.75));
-    for (const { canvas, grid, centerY, kind, value } of shapePreviews) {
-      const depthAt = kind === "top" ? (row, column) => topDepth(value, row, column)
-        : kind === "bottom" ? (row, column) => bottomDepth(value, row, column)
-        : (_, column) => middleDepth(value, column);
-      placeVoxels(mesh, grid, depthAt);
-      camera.position.set(7, centerY + 6, 15);
-      camera.lookAt(0, centerY, 0);
+    for (const { canvas, kind, value } of shapePreviews) {
+      const key = kind === "waist" ? "waist" : kind === "top" ? "top" : "bottom";
+      const previewSpec = { ...spec, [key]: value };
+      const { grid, masks } = nativeVolume(previewSpec, rasterize(previewSpec), bodyForm);
+      placeVoxels(mesh, grid, (row, column) => masks[row][column], VOLUME_LAYERS, VOLUME_ORIGIN);
+      camera.position.set(7, 10, 15);
+      camera.lookAt(0, 4, -1.5);
       drawThumbnail(canvas.getContext("2d"), scene, camera);
     }
     mesh.dispose();
@@ -710,15 +833,16 @@ export function createStage(host, avatar, shapePreviews, rasterize, restPaint) {
     const wallCamera = new THREE.OrthographicCamera(-5.25, 5.25, 5.25, -5.25, 0.1, 40);
     wallCamera.position.set(8.6, 7.7, 17);
     wallCamera.lookAt(0, 4, 0);
-    const thumbnailBody = new THREE.InstancedMesh(cube, skin, SIZE * SIZE * BODY_LAYERS);
+    const thumbnailBody = new THREE.InstancedMesh(cube, skin, SIZE * SIZE * VOLUME_LAYERS);
     thumbnailBody.frustumCulled = false;
     critter.visible = false;
     scene.add(thumbnailBody);
-    for (const { model, spec, grid } of tiles) {
-      const cells = placeVoxels(thumbnailBody, grid, (row, column) => bodyDepth(spec, grid, row, column));
+    for (const { model, spec, grid: eyeGrid, form, eyeStyle } of tiles) {
+      const { grid, masks } = nativeVolume(spec, eyeGrid, form ?? bodyForm);
+      const cells = placeVoxels(thumbnailBody, grid, (row, column) => masks[row][column], VOLUME_LAYERS, VOLUME_ORIGIN);
       const paint = restPaint(spec);
-      paintVoxels(thumbnailBody, cells, grid.flatMap((row, y) => row.map((_, x) => paint(x, y))));
-      const tileEyes = makeEyes(grid, spec);
+      paintVoxels(thumbnailBody, cells, grid.flatMap((row, y) => row.map((_, x) => paint(x, y))), spec, form ?? bodyForm);
+      const tileEyes = makeEyes(grid, spec, eyeStyle ?? "round");
       for (const eye of tileEyes) {
         const { x, y } = pupilPosition(eye, spec.eyes.gaze.dx, -spec.eyes.gaze.dy);
         eye.pupil.position.x = x;
@@ -743,6 +867,7 @@ export function createStage(host, avatar, shapePreviews, rasterize, restPaint) {
       height = h;
       renderer.setSize(width, height, false);
       composer.setSize(width, height);
+      accessoryMask.setSize(canvas.width, canvas.height);
       refresh();
     }
     if (transition) {
@@ -779,8 +904,20 @@ export function createStage(host, avatar, shapePreviews, rasterize, restPaint) {
     motionSince ??= time;
     const speechPose = speechAttention.update(time, speechSignal);
     const pose = directedPose ?? (allowMotion && !transition && requestedMotion === "none" ? speechPose : null)
+      ?? blockPose3D(motionName, (time - motionSince) / 1000)
       ?? motionPose3D(motionName, (time - motionSince) / 1000);
-    const following = !pose && !transition && pointerTarget !== null;
+    if (!allowMotion || transition) petSince = null;
+    const pet = petSince === null ? null : petPose(Math.max(0, time - petSince));
+    if (!pet && petSince !== null) { petSince = null; refresh(); }
+    canvas.dataset.petting = String(Boolean(pet));
+    const following = allowMotion && !transition && !attention && pointerTarget !== null;
+    let hovered = false;
+    if (pointerTarget?.overStage && !transition) {
+      pointerNDC.set(pointerTarget.x, pointerTarget.y);
+      pointerRay.setFromCamera(pointerNDC, camera);
+      hovered = pointerRay.intersectObject(body, false).length > 0;
+    }
+    canvas.dataset.hovered = String(hovered);
     const ease = allowMotion ? 1 - Math.exp(-delta / 105) : 1;
     const follow = (current, target) => {
       const next = THREE.MathUtils.lerp(current, target, ease);
@@ -789,6 +926,9 @@ export function createStage(host, avatar, shapePreviews, rasterize, restPaint) {
     const nextX = follow(pointerX, following ? pointerTarget.x : 0);
     const nextY = follow(pointerY, following ? pointerTarget.y : 0);
     const nextWeight = follow(pointerWeight, Number(following));
+    const nextHover = follow(hoverWeight, Number(hovered && allowMotion && !attention));
+    const hoverChanged = nextHover !== hoverWeight;
+    hoverWeight = nextHover;
     const pointerChanged = nextX !== pointerX || nextY !== pointerY || nextWeight !== pointerWeight;
     pointerX = nextX;
     pointerY = nextY;
@@ -804,9 +944,9 @@ export function createStage(host, avatar, shapePreviews, rasterize, restPaint) {
     const expression = pose ? { x: pose.gazeX, y: pose.gazeY, open: pose.open, lean: 0 }
       : useIdle ? idleExpression(time - startedAt)
       : { x: gaze.dx > 0 ? 1 : -1, y: gaze.dy > 0 ? -1 : 1, open: 1, lean: 0 };
-    if (pointerWeight && !pose) {
+    if (pointerWeight) {
       // Reach the pixel eye's edge just before the pointer leaves the stage.
-      const pointerGazeX = eyeShape === "pixel"
+      const pointerGazeX = ["pixel", "pixel-square"].includes(eyeShape)
         ? THREE.MathUtils.clamp(pointerX / 0.85, -1, 1) * pointerWeight
         : pointerX * 0.9;
       expression.x = expression.x * (1 - pointerWeight) + pointerGazeX;
@@ -822,6 +962,7 @@ export function createStage(host, avatar, shapePreviews, rasterize, restPaint) {
       expression.open = THREE.MathUtils.lerp(expression.open, 1.035 - 0.99 * blink, attention);
       expression.lean *= 1 - attention;
     }
+    if (pet) expression.open *= pet.open;
     const closedEyes = pose?.closedEyes ?? expression.open <= 0.08;
     const poses = eyes.map(eye => pupilPosition(eye, expression.x, expression.y));
     const pupilChanged = eyes.some((eye, i) =>
@@ -829,47 +970,67 @@ export function createStage(host, avatar, shapePreviews, rasterize, restPaint) {
       eye.sclera.visible === closedEyes ||
       (!closedEyes && (eye.pupil.position.x !== poses[i].x || eye.pupil.position.y !== poses[i].y))
     );
-    const scaleX = 1 + 0.014 * breath;
+    const scaleX = 1 + 0.014 * breath + 0.025 * hoverWeight;
     const breathingChanged = critter.scale.x !== scaleX;
     if (!pose && !dirty && !attentionChanged && !pointerChanged && !(allowMotion && attention)
-        && !pupilChanged && !breathingChanged) return;
+        && !pupilChanged && !breathingChanged && !hoverChanged && !pet) return;
     if (dirty) updateBody();
     dirty = false;
     const depthScale = THREE.MathUtils.lerp(0.1, 1, THREE.MathUtils.smoothstep(projection, 0.06, 0.94));
-    const squash = pose?.squash ?? 1;
+    const squash = (pose?.squash ?? 1) * (pet?.squash ?? 1);
     critter.scale.set(scaleX / Math.sqrt(squash), squash * (1 + 0.025 * breath), depthScale / Math.sqrt(squash));
     const faceCamera = Math.atan2(camera.position.x - orbit.target.x, camera.position.z - orbit.target.z);
     const followWeight = allowMotion ? (1 - attention) : 0;
     const leanIn = allowMotion ? Math.sin(Math.PI * THREE.MathUtils.smoothstep(listeningTime, 0, 0.68)) : 0;
     const listenSway = allowMotion ? Math.sin(listeningTime * 1.8) : 0;
     critter.rotation.set(
-      pose?.pitch ?? ((-0.09 - 0.085 * leanIn + 0.024 * listenSway) * attention - 0.16 * pointerY * followWeight),
-      pose?.yaw ?? ((faceCamera + 0.045 * listenSway) * attention
-        + (0.18 * faceCamera * pointerWeight + 0.32 * pointerX) * followWeight),
-      pose?.roll ?? (-expression.lean - 0.04 * pointerX * followWeight + 0.041 * listenSway * attention),
+      (pose?.pitch ?? ((-0.09 - 0.085 * leanIn + 0.024 * listenSway) * attention)) - 0.16 * pointerY * followWeight,
+      (pose?.yaw ?? ((faceCamera + 0.045 * listenSway) * attention))
+        + (0.18 * faceCamera * pointerWeight + 0.32 * pointerX) * followWeight,
+      (pose?.roll ?? (-expression.lean + 0.041 * listenSway * attention)) - 0.04 * pointerX * followWeight + (pet?.roll ?? 0),
       "YXZ"
     );
     const pivotOffset = motionPivot.set(0, 4 * critter.scale.y, 0).applyEuler(critter.rotation);
     critter.position.set((pose?.x ?? 0) - pivotOffset.x,
-      4 * critter.scale.y - pivotOffset.y + (pose?.y ?? Math.abs(expression.lean) * 2.8),
+      4 * critter.scale.y - pivotOffset.y + (pose?.y ?? Math.abs(expression.lean) * 2.8) + 0.14 * hoverWeight + (pet?.lift ?? 0),
       (pose?.z ?? 0) - pivotOffset.z);
-    skin.emissiveIntensity = 0.2 + GLOW * 0.92 * (pose?.glow ?? 1);
+    skin.emissiveIntensity = 0.2 + GLOW * 0.92 * ((pose?.glow ?? 1) + 0.18 * hoverWeight);
     eyes.forEach((eye, i) => {
       eye.opening.scale.y = expression.open;
       eye.sclera.visible = !closedEyes;
+      if (eye.details) eye.details.visible = !closedEyes;
       eye.pupil.visible = closedEyes || !eye.pixel;
       eye.pupil.scale.x = closedEyes ? 1.55 : 1;
+      for (const glint of eye.pupil.children) glint.visible = !closedEyes;
       eye.pupil.position.x = closedEyes ? 0 : poses[i].x;
       eye.pupil.position.y = closedEyes ? 0 : poses[i].y;
       eye.center?.set(poses[i].x, poses[i].y);
     });
+    // Rebuild from rest every frame, including when a clip is interrupted.
+    for (let i = 0; i < restVoxels.length; i++) {
+      const { position, face } = restVoxels[i];
+      const offset = pose && blockMotion3D(motionName, (time - motionSince) / 1000,
+        position.x, position.y, position.z, face);
+      blockPosition.copy(position);
+      if (offset) {
+        blockPosition.x += offset.x;
+        blockPosition.y += offset.y;
+        blockPosition.z += offset.z;
+      }
+      blockRotation.setFromAxisAngle(blockAxis, offset?.turn ?? 0);
+      blockMatrix.compose(blockPosition, blockRotation, blockScale);
+      body.setMatrixAt(i, blockMatrix);
+    }
+    body.instanceMatrix.needsUpdate = true;
+    for (const eye of eyes) eye.opening.position.z = BODY_FRONT + 0.004 + (pose?.faceDepth ?? 0);
     const anchor = accessoryOption?.anchor;
     const headwear = anchor === "head" || anchor === "top";
-    avatarCamera.zoom = headwear ? 0.86 : 1;
+    const tallCap = accessoryOption?.value === "baseball-cap";
+    avatarCamera.zoom = tallCap ? 0.66 : headwear ? 0.86 : 1;
     avatarCamera.updateProjectionMatrix();
     drawThumbnail(avatarContext, scene, avatarCamera);
     const scale = THREE.MathUtils.lerp(1, previewScale, projection);
-    const span = Math.max(anchor === "head" ? 6.45 : anchor === "top" ? 6.15 : 5.5,
+    const span = Math.max(tallCap ? 7.4 : anchor === "head" ? 6.45 : anchor === "top" ? 6.15 : 5.5,
       (headwear ? 5.75 : 5.2) * height / width) / scale;
     camera.left = -span * width / height;
     camera.right = -camera.left;
@@ -877,12 +1038,60 @@ export function createStage(host, avatar, shapePreviews, rasterize, restPaint) {
     camera.bottom = -span;
     camera.updateProjectionMatrix();
     updateSilhouettePasses();
+    if (accessoryMesh) {
+      // Capture only visible accessory pixels. Body and eyes still write depth,
+      // so back-mounted pieces retain proper occlusion without undoing rounding.
+      const maskedMaterials = new Set([skin]);
+      for (const eye of eyes) eye.opening.traverse(mesh => {
+        if (mesh.material) maskedMaterials.add(mesh.material);
+      });
+      const previousTarget = renderer.getRenderTarget();
+      const previousWrites = new Map([...maskedMaterials].map(material => [material, material.colorWrite]));
+      try {
+        for (const material of maskedMaterials) material.colorWrite = false;
+        renderer.setRenderTarget(accessoryMask);
+        renderer.render(scene, camera);
+      } finally {
+        for (const [material, value] of previousWrites) material.colorWrite = value;
+        renderer.setRenderTarget(previousTarget);
+      }
+    }
     composer.render();
+    if (pendingCapture) {
+      const capture = pendingCapture;
+      pendingCapture = null;
+      // Read inside the render frame, before WebGL clears its drawing buffer.
+      try {
+        canvas.toBlob(blob => blob ? capture.resolve(blob) : capture.reject(new Error("PNG capture failed")), "image/png");
+      } catch (error) { capture.reject(error); }
+    }
   }
 
   return {
     setCritter, setEyeShape, setAccessory, setPreviewScale, draw, setProjection, setWall,
-    setPointer: point => { pointerTarget = point; },
+    setBodyForm: next => {
+      if (next === bodyForm) return;
+      bodyForm = next;
+      pendingWall = wallTiles;
+      if (spec) { const previous = spec; spec = null; setCritter(previous); }
+    },
+    setPointer: point => {
+      pointerTarget = point;
+      if (!point) canvas.dataset.hovered = "false";
+      refresh();
+    },
+    hitTest: point => {
+      if (transition || !spec || projection < 1) return false;
+      pointerNDC.set(point.x, point.y);
+      pointerRay.setFromCamera(pointerNDC, camera);
+      return pointerRay.intersectObject(body, false).length > 0;
+    },
+    capturePNG: () => new Promise((resolve, reject) => {
+      if (pendingCapture) { reject(new Error("A capture is already pending")); return; }
+      pendingCapture = { resolve, reject };
+      refresh();
+    }),
+    pet: () => { petSince = performance.now(); refresh(); },
     transitioning: () => transition !== null,
     resetView: () => { if (orbit.enabled) orbit.reset(); },
   };

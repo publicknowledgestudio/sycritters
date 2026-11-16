@@ -64,7 +64,11 @@
     filter: drop-shadow(0 1px 2px #20243435) drop-shadow(0 0 12px var(--glow-color, transparent));
   }
   .stage-3d > canvas[tabindex="0"] { cursor: grab; pointer-events: auto; }
+  .stage-3d > canvas[data-hovered="true"] { cursor: url("./assets/glove-cursor.svg") 20 5, pointer; }
   .stage-3d > canvas:active { cursor: grabbing; }
+  .stage-3d > canvas[data-petting="true"] { cursor: none; }
+  #petHand { position: fixed; width: 80px; height: 80px; z-index: 100; pointer-events: none; filter: drop-shadow(0 5px 4px #18203530); }
+  #petHand[hidden] { display: none; }
   .stage-3d > canvas:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
   .stage-3d__status {
     position: absolute; inset: 0; display: grid; place-content: center; margin: 0;
@@ -110,8 +114,22 @@
   .editor-menus .btn[aria-expanded="true"] { color: var(--surface); background: var(--text); border-color: var(--text); }
   .wall-pages button { padding: 5px 7px; }
   .wall-pages button:disabled { opacity: .4; cursor: default; }
-  #app[data-view="3d"] #bodyAnim { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  #app[data-view="3d"] #bodyAnim button { padding: 5px 3px; font-size: 10px; }
+  #blockAnim, #volumeForms { display: none; }
+  #curatedCollection { padding: 12px 0; }
+  #curatedCollection[hidden] { display: none; }
+  #curatedCollection h2 { font-size: 14px; margin: 0 0 10px; }
+  #curatedChoices { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(100px, 1fr); overflow-x: auto; padding-bottom: 7px; overscroll-behavior-inline: contain; }
+  #curatedChoices button { display: flex; flex-direction: column; align-items: center; padding: 5px; }
+  #curatedChoices canvas { width: 64px; height: 64px; max-width: 100%; }
+  @media (max-width: 600px) { #curatedChoices canvas { width: 36px; height: 36px; } }
+  #curatedDescription { margin: 10px 0 0; font-size: 12px; color: var(--text-dim); }
+  #app[data-curated="true"] .wall,
+  #app[data-curated="true"] button[aria-controls="topMenu"],
+  #app[data-curated="true"] button[aria-controls="middleMenu"],
+  #app[data-curated="true"] button[aria-controls="bottomMenu"],
+  #app[data-curated="true"] button[aria-controls="seedMenu"] { display: none; }
+  #app[data-view="3d"] #blockAnim { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  #app[data-view="3d"] #blockAnim button { padding: 5px 3px; font-size: 10px; }
   #app[data-view="3d"] #eyeShape3D { display: grid; }
   #app[data-view="3d"] .stage-3d__hint { margin-left: auto; }
   @media (max-width: 590px) {
@@ -353,14 +371,21 @@
     <div id="grid" class="wall__grid"></div>
   </section>
 
+  <section id="curatedCollection" hidden aria-label="Handcrafted critters">
+    <h2>Handcrafted critters <span style="font-size:11px;font-weight:400;color:var(--text-dim)">11 designs · scroll to explore →</span></h2>
+    <div id="curatedChoices" class="seg" role="group" aria-label="Choose a curated critter"></div>
+    <p id="curatedDescription"></p>
+  </section>
   <section class="stage" id="playground">
     <div class="specimen">
       <div class="preview-bar">
         <div class="view-switch" role="group" aria-label="Preview mode">
           <button class="btn" id="viewPixel" type="button" aria-pressed="true" aria-controls="pixelStage">Pixel</button>
           <button class="btn" id="view3D" type="button" aria-pressed="false" aria-controls="preview3D">3D</button>
+          <button class="btn" id="viewCurated" type="button" aria-pressed="false" aria-controls="curatedCollection preview3D">Curated</button>
         </div>
       </div>
+      <img id="petHand" src="./assets/petting-hand.svg" alt="" aria-hidden="true" hidden />
       <div id="preview3D">
         <div class="stage-3d" id="stage3D">
           <div class="specimen__card" id="pixelStage"><canvas id="editor" width="256" height="256" role="img" aria-label="current critter preview"></canvas></div>
@@ -371,7 +396,8 @@
             <canvas id="avatar3D" width="48" height="48" role="img" aria-label="Animated 3D critter at 24 pixels"></canvas>
             <span>24 px</span>
           </div>
-          <p class="stage-3d__hint" id="orbitHint">Drag or use arrow keys to orbit</p>
+          <span id="pngCaptureStatus" role="status" aria-live="polite"></span>
+          <p class="stage-3d__hint" id="orbitHint">Click the critter to pet · Drag or use arrow keys to orbit</p>
           <label class="preview-scale" title="Scale the main preview">
             Scale <input id="previewScale" type="range" min="50" max="115" step="5" value="100" />
             <output id="previewScaleValue" for="previewScale" aria-hidden="true">100%</output>
@@ -431,6 +457,9 @@
 
       <div class="ctl" id="topMenu">
         <label class="ctl__label">&#9646; Top</label>
+        <span class="sublabel" data-3d-only>Volume</span>
+        <div id="volumeForms" class="seg" data-3d-only role="group" aria-label="3-D body volume"></div>
+        <span class="sublabel" data-3d-only>Top features</span>
         <div id="tops" class="seg seg--preview"></div>
       </div>
 
@@ -469,8 +498,9 @@
 
       <div class="ctl" id="motionMenu">
         <label class="ctl__label">&#9646; Motion</label>
-        <div id="bodyAnim" class="seg"></div>
-        <div id="pushPanel" hidden>
+        <div id="bodyAnim" class="seg" data-pixel-only></div>
+        <div id="blockAnim" class="seg" data-3d-only role="group" aria-label="3-D animation"></div>
+        <div id="pushPanel" data-pixel-only hidden>
           <span class="sublabel">push direction</span>
           <div id="pushDir" class="seg" title="which way the critter pushes"></div>
           <span class="sublabel">transition to</span>
@@ -489,9 +519,18 @@
           <button type="button" data-sound="bright-chirp"><span aria-hidden="true">▶</span> Bright chirp</button>
           <button type="button" data-sound="curious-trill"><span aria-hidden="true">▶</span> Curious trill</button>
           <button type="button" data-sound="sleepy-hum"><span aria-hidden="true">▶</span> Sleepy hum</button>
+          <button type="button" data-sound="happy-warble" data-format="wav"><span aria-hidden="true">▶</span> Happy warble</button>
+          <button type="button" data-sound="puzzled-boop" data-format="wav"><span aria-hidden="true">▶</span> Puzzled boop</button>
+          <button type="button" data-sound="digital-chatter" data-format="wav"><span aria-hidden="true">▶</span> Digital chatter</button>
+          <button type="button" data-sound="little-purr" data-format="wav"><span aria-hidden="true">▶</span> Little purr</button>
+          <button type="button" data-sound="surprised-squeak" data-format="wav"><span aria-hidden="true">▶</span> Surprised squeak</button>
+          <button type="button" data-sound="gentle-goodnight" data-format="wav"><span aria-hidden="true">▶</span> Gentle goodnight</button>
         </div>
         <label class="check" data-3d-only><input type="checkbox" id="autoSounds" aria-describedby="autoSoundsHint" /> Auto sounds</label>
-        <p id="autoSoundsHint" data-3d-only>Greets you when you approach, beeps after you speak, and reacts to a tap or a change in mood.</p>
+        <p id="autoSoundsHint" data-3d-only>Greets you when you approach and reacts with chirps, warbles, and chatter.</p>
+        <label class="check" data-3d-only><input type="checkbox" id="spokenReplies" checked /> Spoken replies</label>
+        <p class="sublabel" data-3d-only>With Mic on, pause after speaking for a short reply. Replies use a small set of preset phrases.</p>
+        <button class="btn" type="button" id="previewReply" data-3d-only><span aria-hidden="true">▶</span> Hear a reply</button>
         <p id="soundStatus" role="status"></p>
         <audio id="soundPreview" preload="none"></audio>
       </div>
@@ -500,6 +539,7 @@
         <label class="ctl__label" id="exportLabel">&#9646; Export</label>
         <div class="exportrow">
           <button id="png" class="btn" data-pixel-only>PNG</button>
+          <button id="png3D" class="btn" data-3d-only title="Capture the current 3D view after a three-second countdown">PNG · 3 sec</button>
           <button id="svg" class="btn" data-pixel-only>SVG</button>
           <button id="sheet" class="btn" title="12-frame sprite sheet" data-pixel-only>Sheet</button>
           <button id="link" class="btn" title="copy a shareable link">Link</button>
@@ -1112,9 +1152,14 @@ globalThis.Sycritters = (function () {
 
   const params = new URLSearchParams(location.search);
   const eyeShapes = [
+    ["outlined", "Outlined", '<ellipse cx="12" cy="12" rx="7.5" ry="9.5" stroke="#222" stroke-width="1.2"/>', '<ellipse cx="12" cy="12" rx="4.6" ry="6.6"/><circle cx="13.5" cy="8.5" r="1.1" fill="white"/>'],
+    ["lashed", "Lashed", '<path d="M5.5 19q-1-16 6.5-16t6.5 16q-6.5-2-13 0Z" stroke="#222" stroke-width="1.1"/><path d="M7 7Q3 7 3 3M5 19q7-3 14 0" fill="none" stroke="#222" stroke-width="1.2" stroke-linecap="round"/>', '<ellipse cx="13" cy="12" rx="4.6" ry="7.3"/><circle cx="11" cy="8" r="2" fill="white"/>'],
+    ["arched", "Arched", '', '<path d="M4 9q2-12 8-11t8 11" transform="translate(0 3)" fill="none" stroke="#222" stroke-width="1.3" stroke-linecap="round"/><ellipse cx="12" cy="14" rx="5.3" ry="7.7"/><circle cx="13.5" cy="10.5" r="1.6" fill="white"/><circle cx="15" cy="13" r=".7" fill="white"/>'],
+    ["cartoon", "Cartoon", '<ellipse cx="12" cy="12" rx="6.9" ry="9.3"/>', '<path d="M8 7.2a4.4 6.7 0 1 0 2.6-1.6L12 10Z"/><circle cx="13.4" cy="10" r="1" fill="#ffffe9"/><circle cx="12.6" cy="12.5" r=".5" fill="#ffffe9"/>'],
     ["round", "Round", '<circle cx="12" cy="12" r="8.4"/>', '<circle cx="12" cy="12" r="4.4"/>'],
     ["oval", "Oval", '<ellipse cx="12" cy="12" rx="6.7" ry="8.4"/>', '<ellipse cx="12" cy="12" rx="3.8" ry="4.7"/>'],
     ["soft-square", "Soft square", '<rect x="3.6" y="3.6" width="16.8" height="16.8" rx="4.2"/>', '<circle cx="12" cy="12" r="4.4"/>'],
+    ["pixel-square", "Square pixel", '<rect x="3.5" y="3.5" width="17" height="17"/>', '<rect x="6" y="3.5" width="8.5" height="17"/>'],
     ["pixel", "Pixel", '<rect x="3.5" y="3.5" width="17" height="17"/>', '<rect x="6" y="3.5" width="8.5" height="17"/>'],
     ["wide", "Wide", '<ellipse cx="12" cy="12" rx="8.4" ry="5.6"/>', '<circle cx="12" cy="12" r="3.2"/>'],
     ["almond", "Almond", '<path d="M3.6 12q8.4-13.6 16.8 0q-8.4 13.6-16.8 0Z"/>', '<circle cx="12" cy="12" r="3.7"/>'],
@@ -1124,6 +1169,13 @@ globalThis.Sycritters = (function () {
   }));
   const accessories = [
     { value: "none", label: "None", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="7"/><path d="m7 17 10-10"/></svg>' },
+    { value: "baseball-cap", label: "Baseball cap", width: 5, anchor: "top", art: '<path fill="#3965d8" d="M4 14a8 8 0 0 1 16 0v2H4Z"/><path fill="#3965d8" d="M3 15h18q4 4-1 4H3Z"/><circle fill="#ffffff" cx="12" cy="10" r="2"/>' },
+    { value: "beret", label: "Beret", width: 5, anchor: "top", art: '<ellipse fill="#a92e42" cx="11" cy="12" rx="10" ry="6"/><path fill="#000000" d="M5 15h14v3H5Z"/><path fill="#a92e42" d="M10 3h2v5h-2Z"/>' },
+    { value: "flower-crown", label: "Flower crown", width: 5, anchor: "top", art: '<path fill="none" stroke="#3b8054" stroke-width="2" d="M2 16q10-12 20 0"/><g fill="#ffa9c7"><circle cx="5" cy="12" r="4"/><circle cx="12" cy="8" r="4"/><circle cx="19" cy="12" r="4"/></g><g fill="#ffbb33"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="8" r="1.5"/><circle cx="19" cy="12" r="1.5"/></g>' },
+    { value: "monocle", label: "Monocle", width: 3, anchor: "eyes", art: '<circle fill="none" stroke="#ba873b" stroke-width="2" cx="10" cy="8" r="6"/><path fill="none" stroke="#ba873b" stroke-width="1.2" d="M16 9q6 12-1 13t-3-3"/>' },
+    { value: "backpack", label: "Backpack", width: 3.5, anchor: "back", art: '<path fill="none" stroke="#e8c28b" stroke-width="2" d="M8 6V4q4-5 8 0v2"/><rect fill="#b56c3e" x="4" y="5" width="16" height="18" rx="5"/><rect fill="#e8c28b" x="6" y="13" width="12" height="7" rx="2"/><rect fill="#000000" x="11" y="11" width="2" height="4"/>' },
+    { value: "square-glasses", label: "Square glasses", width: 5.3, anchor: "eyes", art:
+      '<path fill="#000000" fill-rule="evenodd" d="M1 6q0-2 2-2h6q2 0 2 2v12q0 2-2 2H3q-2 0-2-2Zm1.7.3v11.4q0 .6.6.6h5.4q.6 0 .6-.6V6.3q0-.6-.6-.6H3.3q-.6 0-.6.6ZM13 6q0-2 2-2h6q2 0 2 2v12q0 2-2 2h-6q-2 0-2-2Zm1.7.3v11.4q0 .6.6.6h5.4q.6 0 .6-.6V6.3q0-.6-.6-.6h-5.4q-.6 0-.6.6Z"/><path fill="#000000" d="M10 10h4v1.7h-4Z"/>' },
     { value: "round-glasses", label: "Round glasses", width: 5.3, anchor: "eyes", art:
       '<path fill="#000000" fill-rule="evenodd" d="M1 12a5 5 0 1 1 10 0 5 5 0 0 1-10 0Zm1.5 0a3.5 3.5 0 1 0 7 0 3.5 3.5 0 0 0-7 0ZM13 12a5 5 0 1 1 10 0 5 5 0 0 1-10 0Zm1.5 0a3.5 3.5 0 1 0 7 0 3.5 3.5 0 0 0-7 0Z"/><path fill="#000000" d="M10 10h4v1.5h-4Z"/>' },
     { value: "top-hat", label: "Top hat", width: 4.1, anchor: "top", art:
@@ -1154,8 +1206,15 @@ globalThis.Sycritters = (function () {
   let wallPage = 0;
   const shapePreviews = [];
   const requestedView = params.get("view");
-  let show3D = requestedView === "3d" ||
+  let curatedMode = requestedView === "curated";
+  let curatedId = ["brass", "ember", "minty", "loaf", "barrel", "wedge", "boulder", "pillar", "duo", "step", "cushion"].includes(params.get("critter")) ? params.get("critter") : "brass";
+  let curatedCatalog = null;
+  let curatedTiles = [];
+  let generatedCurrent = null, curatedCurrent = null;
+  let show3D = curatedMode || requestedView === "3d" ||
     (!requestedView && !params.has("c") && location.protocol !== "file:");
+  const volumeForms = ["seed", "orb", "bean", "pear", "capsule", "pebble", "block"];
+  let volumeForm = volumeForms.includes(params.get("volume")) ? params.get("volume") : "seed";
   let preview3D = null, loading3D = false;
 
   // Boot from a share URL (?c=<spec>) when present. We read the raw query
@@ -1172,6 +1231,7 @@ globalThis.Sycritters = (function () {
 
   let current = force2x2Eyes(specFromURL() || S.generate(show3D ? "mint-26802" : "sycritter"));
   let bodyAnimMode = "none";
+  let blockAnimMode = "none";
   let pushDir = "r";   // active push direction (push wall)
   let pushDirB = "l";  // the "transition to" direction for the A⇄B push export
   let lastFrame = -1;
@@ -1196,7 +1256,7 @@ globalThis.Sycritters = (function () {
     const eyes = eyeShape3D === "round" ? "" : "&eyes=" + eyeShape3D;
     const accessory = accessory3D.value === "none" ? "" : "&accessory=" + accessory3D.value;
     const scale = scaleInput.value === "100" ? "" : "&scale=" + scaleInput.value;
-    const view = show3D ? "&view=3d" + eyes + accessory + scale : "&view=pixel";
+    const view = show3D ? (curatedMode ? "&view=curated&critter=" + curatedId : "&view=3d") + eyes + accessory + scale + (!curatedMode && volumeForm !== "seed" ? "&volume=" + volumeForm : "") : "&view=pixel";
     try { history.replaceState(null, "", "?c=" + specToString(current) + view + location.hash); } catch {}
   }
 
@@ -1223,8 +1283,69 @@ globalThis.Sycritters = (function () {
     $("wallNext").disabled = wallPage + 1 >= pageCount;
   }
 
-  async function setPreviewMode(use3D, animate = true) {
+  function curatedSpec(id) {
+    const base = S.generate("curated-" + id);
+    const fromTemplate = ["brass", "ember", "minty"].includes(id);
+    const paletteIndex = {brass:0, ember:7, minty:1, loaf:2, barrel:0, wedge:4, boulder:6, pillar:3, duo:5, step:7, cushion:1}[id];
+    return { ...base, top: "dome", waist: "straight", bottom: "round",
+      colors: id === "ember" ? [S.PALETTE[0], S.PALETTE[7]] : runFrom(paletteIndex % S.PALETTE.length, id === "brass" ? 1 : fromTemplate ? 2 : 3),
+      gradientDir: id === "brass" ? "none" : "radial",
+      eyes: { ...base.eyes, ...(fromTemplate ? { pupil: "bar", gaze: {dx: id === "ember" ? 1 : -1, dy: 0}, mirror: false } : {}), gap: id === "brass" ? 1 : 2, style: "normal", align: "center" } };
+  }
+
+  function selectCurated() {
+    const entry = curatedCatalog.find(c => c.id === curatedId);
+    if (!curatedCurrent) {
+      curatedCurrent = curatedSpec(curatedId);
+      if (entry.eyeStyle && !params.has("eyes")) { eyeShape3D = entry.eyeStyle; preview3D?.setEyeShape(eyeShape3D); }
+    }
+    current = curatedCurrent;
+    $("curatedDescription").textContent = entry.description;
+    setPressed($("curatedChoices"), b => b.dataset.value === curatedId);
+    if (!$("curatedCollection").hidden) $("curatedChoices").querySelector(`[data-value="${curatedId}"]`)?.scrollIntoView({block:"nearest",inline:"nearest"});
+  }
+
+  async function setPreviewMode(use3D, animate = true, curated = false) {
+    cancelPNGCapture();
+    const wasCurated = curatedMode;
+    curatedMode = curated;
+    if (curatedMode) {
+      if (!generatedCurrent) generatedCurrent = wasCurated ? force2x2Eyes(S.generate("mint-26802")) : current;
+      if (!curatedCatalog) {
+        const { CURATED_CRITTERS } = await import("./critter-curated.mjs");
+        if (wasCurated && params.has("c")) curatedCurrent = current;
+        curatedCatalog = CURATED_CRITTERS;
+        buildSeg($("curatedChoices"), curatedCatalog.map(c => ({value:c.id,label:c.name})), id => {
+          curatedId = id;
+          const entry = curatedCatalog.find(c => c.id === id);
+          if (entry.eyeStyle) { eyeShape3D = entry.eyeStyle; preview3D?.setEyeShape(eyeShape3D); }
+          curatedCurrent = null;
+          selectCurated();
+          preview3D?.setBodyForm("curated:" + id);
+          render();
+        }, false);
+        curatedTiles = curatedCatalog.map(entry => {
+          const button = $("curatedChoices").querySelector(`[data-value="${entry.id}"]`);
+          const model = document.createElement("canvas");
+          model.width = model.height = 96;
+          model.setAttribute("aria-hidden", "true");
+          button.prepend(model);
+          const spec = curatedSpec(entry.id);
+          return { model, spec, grid: S.rasterize(spec), form: "curated:" + entry.id, eyeStyle: entry.eyeStyle };
+        });
+        preview3D?.setWall([...wallTiles, ...curatedTiles]);
+      }
+      selectCurated();
+    } else if (wasCurated && generatedCurrent) {
+      curatedCurrent = current;
+      current = generatedCurrent;
+      generatedCurrent = null;
+    }
     show3D = use3D;
+    $("app").dataset.curated = String(curatedMode);
+    $("curatedCollection").hidden = !curatedMode;
+    if (curatedMode) $("curatedChoices").querySelector(`[data-value="${curatedId}"]`)?.scrollIntoView({block:"nearest",inline:"nearest"});
+    preview3D?.setBodyForm(curatedMode ? "curated:" + curatedId : volumeForm);
     if (!show3D) {
       stopMic();
       resetStagePointer();
@@ -1233,15 +1354,17 @@ globalThis.Sycritters = (function () {
     $("app").dataset.view = show3D ? "3d" : "pixel";
     setMenu(null);
     showWallPage();
-    $("pupilOptions").hidden = show3D && eyeShape3D !== "pixel";
+    $("pupilOptions").hidden = show3D && !["pixel", "pixel-square"].includes(eyeShape3D);
     const controls = els.tops.closest(".controls");
     controls.classList.toggle("show-shape-thumbnails", show3D && Boolean(preview3D));
     $("viewPixel").setAttribute("aria-pressed", String(!show3D));
-    $("view3D").setAttribute("aria-pressed", String(show3D));
+    $("view3D").setAttribute("aria-pressed", String(show3D && !curatedMode));
+    $("viewCurated").setAttribute("aria-pressed", String(curatedMode));
     $("pixelStage").setAttribute("aria-hidden", String(show3D));
     $("toolbar3D").hidden = !show3D;
     $("exportLabel").textContent = show3D ? "▪ Share" : "▪ Export";
     updateURL();
+    render();
     lastFrame = -1;
     if (preview3D) {
       preview3D.setProjection(show3D, animate && !reducedMotion.matches);
@@ -1256,11 +1379,12 @@ globalThis.Sycritters = (function () {
     try {
       const { createStage } = await import("./critter-3d.mjs");
       preview3D = createStage($("stage3D"), $("avatar3D"), shapePreviews, S.rasterize, restPaint);
+      preview3D.setBodyForm(curatedMode ? "curated:" + curatedId : volumeForm);
       preview3D.setEyeShape(eyeShape3D);
       preview3D.setAccessory(accessory3D);
       preview3D.setPreviewScale(Number(scaleInput.value) / 100);
       preview3D.setCritter(current);
-      preview3D.setWall(wallTiles);
+      preview3D.setWall([...wallTiles, ...curatedTiles]);
       preview3D.setProjection(show3D, animate && !reducedMotion.matches);
       lastFrame = -1;
       $("resetOrbit").disabled = false;
@@ -1281,11 +1405,13 @@ globalThis.Sycritters = (function () {
   // owns drawing the editor critter every frame from `current`.
   function render() {
     current = force2x2Eyes(current);
+    if (curatedMode && curatedCatalog) curatedCurrent = current;
     els.seed.value = seedFieldValue(current);
     // honest seed plate: flag when overrides mean the seed alone won't
     // reproduce this critter (the URL still will)
     const pristine = isPristineSpec(current);
-    els.seedReadout.textContent = current.seed + (pristine ? "" : " · edited");
+    document.querySelector(".specimen__plate .k").textContent = curatedMode ? "CRITTER" : "SEED";
+    els.seedReadout.textContent = curatedMode ? (curatedCatalog?.find(c => c.id === curatedId)?.name ?? "Handcrafted") : current.seed + (pristine ? "" : " · edited");
     updateURL();
     syncControls();
     preview3D?.setCritter(current);
@@ -1655,7 +1781,7 @@ globalThis.Sycritters = (function () {
       const allowMotion = !reducedMotion.matches;
       if (preview3D) {
         const hearing = sampleMic(t);
-        preview3D.draw(t, allowMotion && els.animEyes.checked, bodyAnimMode, allowMotion, hearing, null, {
+        preview3D.draw(t, allowMotion && els.animEyes.checked, show3D ? blockAnimMode : "none", allowMotion, hearing, null, {
           enabled: micSession?.context?.state === "running" && !document.hidden,
           speaking: Boolean(micSession?.voiced),
           steady: t - (micSession?.steadySince ?? t) > 900,
@@ -1774,13 +1900,18 @@ globalThis.Sycritters = (function () {
       { value: "diagonal-right", label: "Diagonal right" },
       { value: "radial", label: "Radial" },
     ], (v) => override({ gradientDir: v, gradientMotion: "static" }), false);
+    buildSeg($("volumeForms"), volumeForms.map(value => ({ value,
+      label: value === "seed" ? "From seed" : value[0].toUpperCase() + value.slice(1) })), value => {
+      volumeForm = value;
+      preview3D?.setBodyForm(value);
+    }, false);
     buildSeg(els.tops, S.TOPS.map((m) => ({ value: m.name, label: m.name, preview: "top" })), (v) => override({ top: v }), true);
     buildSeg(els.waist, ["straight", "pinch", "narrow", "bite-l", "bite-r"].map((v) => ({ value: v, label: v, preview: "waist" })), (v) => override({ waist: v }), false);
     buildSeg(els.bottoms, S.BOTTOMS.map((m) => ({ value: m.name, label: m.name, preview: "bottom" })), (v) => override({ bottom: v }), true);
     buildSeg(els.eyeStyle, ["normal"], (v) => override({ eyes: { ...current.eyes, style: v } }), false);
     buildSeg($("eyeShape3D"), eyeShapes, value => {
       eyeShape3D = value;
-      $("pupilOptions").hidden = value !== "pixel";
+      $("pupilOptions").hidden = !["pixel", "pixel-square"].includes(value);
       preview3D?.setEyeShape(value);
     }, false);
     buildSeg($("accessoryOptions"), accessories, value => {
@@ -1794,6 +1925,16 @@ globalThis.Sycritters = (function () {
     buildSeg(els.bodyAnim, MOTIONS.map((m) => ({ value: m.name, label: m.label })),
       // "push" is directional: route it to the active push-<dir> cycle.
       (v) => { bodyAnimMode = v === "push" ? "push-" + pushDir : v; }, false);
+    buildSeg($("blockAnim"), [
+      { value: "none", label: "None" },
+      { value: "ripple", label: "Ripple" },
+      { value: "reassemble", label: "Explode & reassemble" },
+      { value: "shuffle", label: "Block shuffle" },
+      { value: "peek", label: "Telescoping peek" },
+      { value: "steps", label: "Stepping blocks" },
+      { value: "burst", label: "Celebration burst" },
+      { value: "power-down", label: "Power-down stack" },
+    ], value => { blockAnimMode = value; }, false);
     const DIR_LABELS = [
       { value: "r", label: "▶ right" }, { value: "l", label: "◀ left" },
       { value: "u", label: "▲ up" },    { value: "d", label: "▼ down" },
@@ -1832,6 +1973,7 @@ globalThis.Sycritters = (function () {
     setPressed(els.palette, (b) => current.colors.some((c) => c.name === b.dataset.name));
     setPressed(els.colorCount, (b) => b.dataset.value === String(current.colors.length));
     setPressed(els.gradDir, (b) => b.dataset.value === current.gradientDir);
+    setPressed($("volumeForms"), b => b.dataset.value === volumeForm);
     setPressed(els.tops, (b) => b.dataset.value === current.top);
     setPressed(els.bottoms, (b) => b.dataset.value === current.bottom);
     setPressed(els.waist, (b) => b.dataset.value === current.waist);
@@ -1845,6 +1987,7 @@ globalThis.Sycritters = (function () {
     setPressed(els.bodyAnim, (b) =>
       b.dataset.value === bodyAnimMode ||
       (b.dataset.value === "push" && String(bodyAnimMode).indexOf("push") === 0));
+    setPressed($("blockAnim"), b => b.dataset.value === blockAnimMode);
     setPressed(els.pushDir, (b) => b.dataset.value === pushDir);
     setPressed(els.pushDirB, (b) => b.dataset.value === pushDirB);
     els.pushPanel.hidden = String(bodyAnimMode).indexOf("push") !== 0;
@@ -1888,7 +2031,7 @@ globalThis.Sycritters = (function () {
       wallTiles.push({ button: btn, model, spec, grid });
     }
     showWallPage();
-    preview3D?.setWall(wallTiles);
+    preview3D?.setWall([...wallTiles, ...curatedTiles]);
   }
 
   /* export */
@@ -1974,6 +2117,56 @@ globalThis.Sycritters = (function () {
     render();
   });
   els.animEyes.addEventListener("change", render);
+  const png3DButton = $("png3D");
+  const pngCaptureStatus = $("pngCaptureStatus");
+  let pngCaptureTimer = null;
+  let pngCaptureGeneration = 0;
+  function cancelPNGCapture() {
+    clearTimeout(pngCaptureTimer);
+    pngCaptureGeneration++;
+    pngCaptureTimer = null;
+    png3DButton.disabled = false;
+    png3DButton.textContent = "PNG · 3 sec";
+    pngCaptureStatus.textContent = "";
+  }
+  png3DButton.addEventListener("click", () => {
+    if (!preview3D || !show3D) return;
+    cancelPNGCapture();
+    const generation = pngCaptureGeneration;
+    const deadline = performance.now() + 3000;
+    png3DButton.disabled = true;
+    const tick = async () => {
+      if (generation !== pngCaptureGeneration) return;
+      const remaining = Math.ceil((deadline - performance.now()) / 1000);
+      if (remaining > 0) {
+        png3DButton.textContent = "PNG in " + remaining + "…";
+        pngCaptureStatus.textContent = "Capturing PNG in " + remaining + "…";
+        pngCaptureTimer = setTimeout(tick, 100);
+        return;
+      }
+      pngCaptureStatus.textContent = "Capturing…";
+      try {
+        const blob = await preview3D.capturePNG();
+        if (generation !== pngCaptureGeneration) return;
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "sycritter-" + (curatedMode ? curatedId : current.seed) + ".png";
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        pngCaptureStatus.textContent = "PNG downloaded";
+      } catch {
+        pngCaptureStatus.textContent = "Couldn’t capture PNG. Try again.";
+      } finally {
+        if (generation === pngCaptureGeneration) {
+          png3DButton.disabled = false;
+          png3DButton.textContent = "PNG · 3 sec";
+        }
+      }
+    };
+    void tick();
+  });
+  document.addEventListener("visibilitychange", () => { if (document.hidden) cancelPNGCapture(); });
   els.png.addEventListener("click", () => downloadPNG());
   els.svg.addEventListener("click", () => downloadSVG());
   els.sheet.addEventListener("click", () => downloadSheet());
@@ -1984,6 +2177,10 @@ globalThis.Sycritters = (function () {
   const soundPreview = $("soundPreview");
   const soundStatus = $("soundStatus");
   const autoSounds = $("autoSounds");
+  const spokenReplies = $("spokenReplies");
+  const replyPhrases = ["I'm listening!", "Tell me more!", "Hmm. What happened next?", "I'm here!", "Go on, I'm curious!"];
+  let replyIndex = 0;
+  let nextReply = 0;
   const stage3D = $("stage3D");
   let soundButton = null;
   let soundRequest = 0;
@@ -1994,6 +2191,36 @@ globalThis.Sycritters = (function () {
   let lastApproach = -Infinity;
   let greetAt = null;
   let stagePointer = null;
+  let petHandAnimation = null;
+  const petHand = $("petHand");
+  function hidePetHand() {
+    petHandAnimation?.cancel();
+    petHandAnimation = null;
+    petHand.hidden = true;
+  }
+  function petCritter(event) {
+    if (reducedMotion.matches) return;
+    preview3D.pet();
+    hidePetHand();
+    petHand.style.left = (event.clientX - 40) + "px";
+    petHand.style.top = (event.clientY - 58) + "px";
+    petHand.hidden = false;
+    petHandAnimation = petHand.animate([
+      { transform: "translate(-12px, -12px) rotate(-22deg)", opacity: 0 },
+      { transform: "translate(-12px, 0) rotate(-16deg)", opacity: 1, offset: 0.12 },
+      { transform: "translate(15px, 7px) rotate(3deg)", opacity: 1, offset: 0.35 },
+      { transform: "translate(-12px, 0) rotate(-16deg)", opacity: 1, offset: 0.55 },
+      { transform: "translate(15px, 7px) rotate(3deg)", opacity: 1, offset: 0.78 },
+      { transform: "translate(20px, -16px) rotate(8deg)", opacity: 0 },
+    ], { duration: 1100, easing: "ease-in-out" });
+    petHandAnimation.onfinish = hidePetHand;
+    autoSound("little-purr");
+  }
+  function critterPoint(event) {
+    const bounds = stage3D.getBoundingClientRect();
+    return { x: 2 * (event.clientX - bounds.left) / bounds.width - 1,
+      y: 1 - 2 * (event.clientY - bounds.top) / bounds.height };
+  }
   let voiceStartedAt = null;
 
   function clearSound() {
@@ -2013,12 +2240,13 @@ globalThis.Sycritters = (function () {
   }
 
   async function playSound(button, automatic = false) {
+    stopSound();
     const request = ++soundRequest;
     soundIsAutomatic = automatic;
     soundStatus.textContent = "";
     clearSound();
     soundButton = button;
-    soundPreview.src = "./sounds/" + button.dataset.sound + ".mp3";
+    soundPreview.src = "./sounds/" + button.dataset.sound + "." + (button.dataset.format || "mp3");
     try {
       await soundPreview.play();
       if (request !== soundRequest) return;
@@ -2032,6 +2260,22 @@ globalThis.Sycritters = (function () {
         : "Couldn’t play that sound. Try again.";
     }
   }
+
+  function sayReply(automatic = false, time = performance.now()) {
+    if (automatic && (!show3D || !spokenReplies.checked || document.hidden || time < nextReply || !soundPreview.paused)) return false;
+    nextReply = time + 3500;
+    const index = replyIndex++ % replyPhrases.length;
+    const button = $("previewReply");
+    button.dataset.sound = "reply-" + index;
+    button.dataset.format = "wav";
+    void playSound(button, automatic);
+    soundStatus.textContent = replyPhrases[index];
+    return true;
+  }
+  $("previewReply").addEventListener("click", () => sayReply());
+  spokenReplies.addEventListener("change", () => {
+    if (!spokenReplies.checked && soundButton?.id === "previewReply") stopSound();
+  });
 
   function autoSound(name, time = performance.now()) {
     const acknowledgement = name === "soft-beeps";
@@ -2053,6 +2297,7 @@ globalThis.Sycritters = (function () {
 
   function resetStagePointer() {
     stagePointer = null;
+    hidePetHand();
     greetAt = null;
     preview3D?.setPointer(null);
   }
@@ -2063,6 +2308,7 @@ globalThis.Sycritters = (function () {
     const clamp = n => Math.max(-1, Math.min(1, n));
     if (!bounds.width || !bounds.height) return;
     preview3D.setPointer({
+      overStage: event.target === stage3D.querySelector("canvas[tabindex]"),
       x: clamp(2 * (event.clientX - bounds.left) / bounds.width - 1),
       y: clamp(1 - 2 * (event.clientY - bounds.top) / bounds.height),
     });
@@ -2075,10 +2321,10 @@ globalThis.Sycritters = (function () {
       greetAt = time + 400;
     }
   });
-  stage3D.addEventListener("pointerleave", () => { greetAt = null; });
+  stage3D.addEventListener("pointerleave", resetStagePointer);
   stage3D.addEventListener("pointerdown", event => {
     if (!show3D || event.button !== 0) return;
-    stagePointer = { id: event.pointerId, x: event.clientX, y: event.clientY, at: performance.now(), moved: false };
+    stagePointer = { id: event.pointerId, x: event.clientX, y: event.clientY, at: performance.now(), moved: false, onCritter: event.target.matches("canvas[tabindex]") && preview3D?.hitTest(critterPoint(event)) };
     greetAt = null;
     preview3D?.setPointer(null);
   });
@@ -2093,8 +2339,10 @@ globalThis.Sycritters = (function () {
   window.addEventListener("pointerup", event => {
     if (stagePointer?.id !== event.pointerId) return;
     const isTap = !stagePointer.moved && performance.now() - stagePointer.at < 550;
+    const shouldPet = isTap && stagePointer.onCritter && preview3D?.hitTest(critterPoint(event));
     stagePointer = null;
-    if (isTap) autoSound("curious-trill");
+    if (shouldPet) { petCritter(event); return; }
+    if (isTap) autoSound(["curious-trill", "little-purr", "surprised-squeak"][Math.floor(Math.random() * 3)]);
   });
 
   $("soundOptions").addEventListener("click", event => {
@@ -2116,8 +2364,9 @@ globalThis.Sycritters = (function () {
   });
   els.bodyAnim.addEventListener("click", event => {
     const motion = event.target.closest("button")?.dataset.value;
-    if (motion === "sleep") autoSound("sleepy-hum");
-    if (motion === "excited" || motion === "jump") autoSound("bright-chirp");
+    if (motion === "sleep" || motion === "power-down") autoSound("gentle-goodnight");
+    if (motion === "excited" || motion === "jump" || motion === "burst") autoSound("happy-warble");
+    if (motion === "shuffle" || motion === "peek") autoSound("puzzled-boop");
   });
   els.miniSize.addEventListener("input", () => { lastFrame = -1; }); // redraw the scaled preview
   els.genWall.addEventListener("click", () => generateWall());
@@ -2159,7 +2408,8 @@ globalThis.Sycritters = (function () {
     if (active) voiceStartedAt = time;
     else {
       if (time !== null && voiceStartedAt !== null && micSession.lastVoice - voiceStartedAt >= 420) {
-        autoSound("soft-beeps", time);
+        if (spokenReplies.checked) sayReply(true, time);
+        else autoSound(["soft-beeps", "digital-chatter", "happy-warble", "puzzled-boop"][Math.floor(Math.random() * 4)], time);
       }
       voiceStartedAt = null;
     }
@@ -2167,6 +2417,7 @@ globalThis.Sycritters = (function () {
 
   function stopMic(message = "") {
     const session = micSession;
+    if (soundButton?.id === "previewReply") stopSound();
     micSession = null;
     clearTimeout(session?.hintTimer);
     session?.stream?.getTracks().forEach(track => track.stop());
@@ -2275,14 +2526,16 @@ globalThis.Sycritters = (function () {
     }
     session.previousVolume = volume;
     session.voiced = time - session.lastVoice < 180;
-    setListening(time - session.lastVoice < 500, time);
+    setListening(time - session.lastVoice < 900, time);
     return listening;
   }
 
   micButton.addEventListener("click", startMic);
   window.addEventListener("pagehide", () => { stopMic(); stopSound(); });
+  document.addEventListener("visibilitychange", () => { if (document.hidden) stopSound(); });
   $("viewPixel").addEventListener("click", () => setPreviewMode(false));
   $("view3D").addEventListener("click", () => setPreviewMode(true));
+  $("viewCurated").addEventListener("click", () => setPreviewMode(true, true, true));
   $("resetOrbit").addEventListener("click", () => preview3D?.resetView());
   scaleInput.addEventListener("input", () => {
     scaleValue.value = scaleInput.value + "%";
@@ -2744,7 +2997,7 @@ for (const m of CAST) {
   generateWall();
   renderCast();
   render();
-  if (show3D) setPreviewMode(true, false);
+  if (show3D) setPreviewMode(true, false, curatedMode);
   requestAnimationFrame(loop);
 
   // Run engine invariant checks from the browser via index.html?test
